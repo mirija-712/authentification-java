@@ -15,4 +15,16 @@
         <module>authentification_back</module>
         <module>authentification_front</module>
     </modules>
+
+    <!-- Obligatoire ici : le goal sonar s’exécute sur ce POM agrégateur (dernier du réacteur). -->
+    <properties>
+        <sonar.organization>mirija-712</sonar.organization>
+        <sonar.projectKey>mirija-712_authentification-java</sonar.projectKey>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.sourceEncoding>UTF-8</sonar.sourceEncoding>
+        <sonar.coverage.jacoco.xmlReportPaths>
+            ${maven.multiModuleProjectDirectory}/authentification_back/target/site/jacoco/jacoco.xml,
+            ${maven.multiModuleProjectDirectory}/authentification_front/target/site/jacoco/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
+    </properties>
 </project>
