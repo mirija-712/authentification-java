@@ -28,6 +28,14 @@
 	</scm>
 	<properties>
 		<java.version>17</java.version>
+		<!-- SonarCloud : comme tp-java — le réacteur racine ne propage pas les propriétés sans chaîne de parent. -->
+		<sonar.organization>mirija-712</sonar.organization>
+		<sonar.projectKey>mirija-712_authentification-java</sonar.projectKey>
+		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
+		<sonar.coverage.jacoco.xmlReportPaths>
+			${maven.multiModuleProjectDirectory}/authentification_back/target/site/jacoco/jacoco.xml,
+			${maven.multiModuleProjectDirectory}/authentification_front/target/site/jacoco/jacoco.xml
+		</sonar.coverage.jacoco.xmlReportPaths>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -71,12 +79,6 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<!-- Jackson (ObjectMapper) pour les tests : plus inclus transitivement comme en SB 3 -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-json</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -124,6 +126,11 @@
 						<version>${spring-restdocs.version}</version>
 					</dependency>
 				</dependencies>
+			</plugin>
+			<plugin>
+				<groupId>org.sonarsource.scanner.maven</groupId>
+				<artifactId>sonar-maven-plugin</artifactId>
+				<version>3.11.0.3922</version>
 			</plugin>
 			<plugin>
 				<groupId>org.jacoco</groupId>

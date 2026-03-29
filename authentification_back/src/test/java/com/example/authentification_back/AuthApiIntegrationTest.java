@@ -2,7 +2,7 @@ package com.example.authentification_back;
 
 import com.example.authentification_back.config.TestAccountInitializer;
 import com.example.authentification_back.service.AuthService;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -13,7 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -22,22 +23,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Tests d'intégration TP2 (MockMvc, H2, profil {@code test}). Les mutations sont annulées en fin de test
- * grâce à {@link Transactional} (les données du {@link TestAccountInitializer} restent car commises au démarrage).
+ * Tests d'intégration TP2 (MockMvc, H2, profil {@code test}). Pas de {@code @Transactional} sur la classe :
+ * avec MockMvc, une transaction de test enveloppante ferait annuler les échecs de login (compteur / verrou)
+ * avant la requête suivante.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Transactional
 class AuthApiIntegrationTest {
 
 	private static final String STRONG = "Aa1!aaaaaaaa";
 
 	@Autowired
 	private MockMvc mockMvc;
-
-	@Autowired
-	private ObjectMapper objectMapper;
 
 	private static String registerJson(String email, String pass, String confirm) {
 		return String.format(
@@ -140,12 +138,13 @@ class AuthApiIntegrationTest {
 								TestAccountInitializer.TEST_PASSWORD_PLAIN)))
 				.andExpect(status().isOk())
 				.andReturn();
-		String token = objectMapper.readTree(login.getResponse().getContentAsString()).get("token").asText();
+		String token = JsonPath.read(login.getResponse().getContentAsString(), "$.token");
 		MvcResult me = mockMvc.perform(get("/api/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.email").value(TestAccountInitializer.TEST_EMAIL))
 				.andReturn();
-		assertThat(objectMapper.readTree(me.getResponse().getContentAsString()).has("token")).isFalse();
+		Map<String, Object> meBody = JsonPath.read(me.getResponse().getContentAsString(), "$");
+		assertThat(meBody.containsKey("token")).isFalse();
 	}
 
 	@Test

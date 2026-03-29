@@ -75,7 +75,11 @@ public class AuthService {
 		return UserResponse.profile(user);
 	}
 
-	@Transactional
+	/**
+	 * Les échecs de connexion doivent être persistés (compteur + verrou) même en répondant 401 :
+	 * sans {@code noRollbackFor}, la transaction annulerait le {@code save} avant le throw.
+	 */
+	@Transactional(noRollbackFor = AuthenticationFailedException.class)
 	public UserResponse login(LoginRequest request) {
 		String email = normalizeEmail(request.email());
 		String rawPassword = request.password();

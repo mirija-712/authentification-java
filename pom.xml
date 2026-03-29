@@ -9,7 +9,7 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>authentification parent</name>
-    <description>Réacteur Maven : API Spring Boot + client JavaFX (analyse Sonar unique sur le dépôt).</description>
+    <description>Réacteur Maven : API Spring Boot + client JavaFX.</description>
 
     <modules>
         <module>authentification_back</module>
