@@ -1,7 +1,7 @@
 package com.example.authentification_back;
 
 import com.example.authentification_back.config.TestAccountInitializer;
-import com.example.authentification_back.security.Tp3Proof;
+import com.example.authentification_back.security.SsoHmac;
 import com.example.authentification_back.service.AuthService;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
@@ -15,7 +15,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -24,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Tests d'intégration TP2/TP3 (MockMvc, H2, profil {@code test}). Pas de {@code @Transactional} sur la classe :
+ * Tests d'intégration TP3 (MockMvc, H2, profil {@code test}). Pas de {@code @Transactional} sur la classe :
  * avec MockMvc, une transaction de test enveloppante ferait annuler les échecs de login (compteur / verrou)
  * avant la requête suivante.
  */
@@ -42,6 +45,15 @@ class AuthApiIntegrationTest {
 		return String.format(
 				"{\"email\":\"%s\",\"password\":\"%s\",\"passwordConfirm\":\"%s\"}",
 				email, pass, confirm);
+	}
+
+	private static String loginHmacJson(String email, String passwordPlain, String nonce, long epochSeconds) {
+		String em = email.trim().toLowerCase(Locale.ROOT);
+		String msg = SsoHmac.messageToSign(em, nonce, epochSeconds);
+		String hmac = SsoHmac.hmacSha256Hex(passwordPlain, msg);
+		return String.format(Locale.ROOT,
+				"{\"email\":\"%s\",\"nonce\":\"%s\",\"timestamp\":%d,\"hmac\":\"%s\"}",
+				em, nonce, epochSeconds, hmac);
 	}
 
 	@Test
@@ -88,66 +100,97 @@ class AuthApiIntegrationTest {
 	}
 
 	@Test
-	void challenge_unknown_email_returns_401() throws Exception {
-		mockMvc.perform(post("/api/auth/challenge")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"email\":\"inexistant@example.com\"}"))
-				.andExpect(status().isUnauthorized());
-	}
-
-	@Test
-	void login_tp3_ok_with_test_account() throws Exception {
-		MvcResult ch = mockMvc.perform(post("/api/auth/challenge")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(String.format("{\"email\":\"%s\"}", TestAccountInitializer.TEST_EMAIL)))
-				.andExpect(status().isOk())
-				.andReturn();
-		String nonce = JsonPath.read(ch.getResponse().getContentAsString(), "$.nonce");
-		String authSalt = JsonPath.read(ch.getResponse().getContentAsString(), "$.authSalt");
-		String fp = Tp3Proof.identityFingerprintHex(
-				TestAccountInitializer.TEST_EMAIL, TestAccountInitializer.TEST_PASSWORD_PLAIN, authSalt);
-		String proof = Tp3Proof.proofHex(fp, nonce);
+	void login_hmac_ok_with_test_account() throws Exception {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond();
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content(String.format(
-								"{\"email\":\"%s\",\"nonce\":\"%s\",\"proof\":\"%s\"}",
-								TestAccountInitializer.TEST_EMAIL, nonce, proof)))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.token").exists());
-	}
-
-	@Test
-	void login_ok_with_test_account() throws Exception {
-		mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(String.format(
-								"{\"email\":\"%s\",\"password\":\"%s\"}",
+						.content(loginHmacJson(
 								TestAccountInitializer.TEST_EMAIL,
-								TestAccountInitializer.TEST_PASSWORD_PLAIN)))
+								TestAccountInitializer.TEST_PASSWORD_PLAIN,
+								nonce,
+								ts)))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.email").value(TestAccountInitializer.TEST_EMAIL))
 				.andExpect(jsonPath("$.token").exists());
 	}
 
 	@Test
-	void login_fails_with_same_generic_message_for_wrong_password() throws Exception {
+	void login_rejects_invalid_email_format() throws Exception {
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content(String.format(
-								"{\"email\":\"%s\",\"password\":\"wrong\"}",
-								TestAccountInitializer.TEST_EMAIL)))
+						.content("{\"email\":\"bad\",\"nonce\":\"n\",\"timestamp\":1,\"hmac\":\"ab\"}"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void login_fails_with_wrong_hmac() throws Exception {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond();
+		String em = TestAccountInitializer.TEST_EMAIL.trim().toLowerCase(Locale.ROOT);
+		String msg = SsoHmac.messageToSign(em, nonce, ts);
+		String badHmac = SsoHmac.hmacSha256Hex("wrong-password", msg);
+		mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(String.format(Locale.ROOT,
+								"{\"email\":\"%s\",\"nonce\":\"%s\",\"timestamp\":%d,\"hmac\":\"%s\"}",
+								em, nonce, ts, badHmac)))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
 	}
 
 	@Test
-	void login_fails_with_same_generic_message_for_unknown_email() throws Exception {
+	void login_fails_when_timestamp_too_old() throws Exception {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond() - 120;
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content(String.format(
-								"{\"email\":\"%s\",\"password\":\"%s\"}",
-								"nobody@example.com",
-								TestAccountInitializer.TEST_PASSWORD_PLAIN)))
+						.content(loginHmacJson(
+								TestAccountInitializer.TEST_EMAIL,
+								TestAccountInitializer.TEST_PASSWORD_PLAIN,
+								nonce,
+								ts)))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
+	}
+
+	@Test
+	void login_fails_when_timestamp_too_far_in_future() throws Exception {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond() + 120;
+		mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(loginHmacJson(
+								TestAccountInitializer.TEST_EMAIL,
+								TestAccountInitializer.TEST_PASSWORD_PLAIN,
+								nonce,
+								ts)))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
+	}
+
+	@Test
+	void login_fails_on_nonce_replay() throws Exception {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond();
+		String body = loginHmacJson(
+				TestAccountInitializer.TEST_EMAIL,
+				TestAccountInitializer.TEST_PASSWORD_PLAIN,
+				nonce,
+				ts);
+		mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isOk());
+		mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
+	}
+
+	@Test
+	void login_fails_for_unknown_email() throws Exception {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond();
+		mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(loginHmacJson("nobody@example.com", "AnyPass1!", nonce, ts)))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
 	}
@@ -160,12 +203,15 @@ class AuthApiIntegrationTest {
 
 	@Test
 	void me_ok_after_login_with_bearer_token() throws Exception {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond();
 		MvcResult login = mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content(String.format(
-								"{\"email\":\"%s\",\"password\":\"%s\"}",
+						.content(loginHmacJson(
 								TestAccountInitializer.TEST_EMAIL,
-								TestAccountInitializer.TEST_PASSWORD_PLAIN)))
+								TestAccountInitializer.TEST_PASSWORD_PLAIN,
+								nonce,
+								ts)))
 				.andExpect(status().isOk())
 				.andReturn();
 		String token = JsonPath.read(login.getResponse().getContentAsString(), "$.token");
@@ -185,20 +231,31 @@ class AuthApiIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(registerJson(email, strong, strong)))
 				.andExpect(status().isCreated());
+		String emLower = email.trim().toLowerCase(Locale.ROOT);
 		for (int i = 0; i < 5; i++) {
+			String n = UUID.randomUUID().toString();
+			long t = Instant.now().getEpochSecond();
+			String badHmac = SsoHmac.hmacSha256Hex("nope", SsoHmac.messageToSign(emLower, n, t));
 			mockMvc.perform(post("/api/auth/login")
 							.contentType(MediaType.APPLICATION_JSON)
-							.content(String.format("{\"email\":\"%s\",\"password\":\"nope\"}", email)))
+							.content(String.format(Locale.ROOT,
+									"{\"email\":\"%s\",\"nonce\":\"%s\",\"timestamp\":%d,\"hmac\":\"%s\"}",
+									emLower, n, t, badHmac)))
 					.andExpect(status().isUnauthorized());
 		}
+		String nonce6 = UUID.randomUUID().toString();
+		long ts6 = Instant.now().getEpochSecond();
+		String badHmac6 = SsoHmac.hmacSha256Hex("nope", SsoHmac.messageToSign(emLower, nonce6, ts6));
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content(String.format("{\"email\":\"%s\",\"password\":\"nope\"}", email)))
+						.content(String.format(Locale.ROOT,
+								"{\"email\":\"%s\",\"nonce\":\"%s\",\"timestamp\":%d,\"hmac\":\"%s\"}",
+								emLower, nonce6, ts6, badHmac6)))
 				.andExpect(status().is(HttpStatus.LOCKED.value()));
 		Thread.sleep(3100);
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content(String.format("{\"email\":\"%s\",\"password\":\"%s\"}", email, strong)))
+						.content(loginHmacJson(email, strong, UUID.randomUUID().toString(), Instant.now().getEpochSecond())))
 				.andExpect(status().isOk());
 	}
 }

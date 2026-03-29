@@ -11,9 +11,8 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * Entité utilisateur (TP2) : mot de passe haché avec BCrypt, compteur d'échecs et verrouillage temporaire.
- * <p>
- * TP2 : BCrypt + lockout. TP3 : sel {@code authSalt} + empreinte {@code identityFingerprint} pour login sans mot de passe en clair.
+ * Utilisateur TP3 : mot de passe chiffré réversible (SMK) pour vérification HMAC côté serveur ;
+ * lockout et jeton inchangés.
  */
 @Entity
 @Table(name = "users")
@@ -26,9 +25,9 @@ public class User {
 	@Column(nullable = false, unique = true, length = 255)
 	private String email;
 
-	/** Hachage BCrypt du mot de passe (jamais le mot de passe en clair). */
-	@Column(name = "password_hash", nullable = false, length = 80)
-	private String passwordHash;
+	/** Mot de passe chiffré avec la SMK (énoncé TP3) — jamais en clair en base. */
+	@Column(name = "password_encrypted", nullable = false, columnDefinition = "TEXT")
+	private String passwordEncrypted;
 
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
@@ -36,23 +35,11 @@ public class User {
 	@Column(unique = true, length = 64)
 	private String token;
 
-	/** Nombre de tentatives de login incorrectes consécutives (remis à 0 après succès). */
 	@Column(name = "failed_login_attempts", nullable = false)
 	private int failedLoginAttempts = 0;
 
-	/** Fin de période de blocage ; null si le compte n'est pas verrouillé. */
 	@Column(name = "lock_until")
 	private Instant lockUntil;
-
-	/** Sel public par utilisateur (TP3) — nécessaire au client pour recalculer l’empreinte. */
-	@Column(name = "auth_salt", length = 64)
-	private String authSalt;
-
-	/**
-	 * Empreinte SHA-256 hex (email|password|sel) — permet de vérifier {@code HMAC(empreinte, nonce)} sans recevoir le mot de passe.
-	 */
-	@Column(name = "identity_fingerprint", length = 64)
-	private String identityFingerprint;
 
 	@PrePersist
 	void prePersist() {
@@ -77,12 +64,12 @@ public class User {
 		this.email = email;
 	}
 
-	public String getPasswordHash() {
-		return passwordHash;
+	public String getPasswordEncrypted() {
+		return passwordEncrypted;
 	}
 
-	public void setPasswordHash(String passwordHash) {
-		this.passwordHash = passwordHash;
+	public void setPasswordEncrypted(String passwordEncrypted) {
+		this.passwordEncrypted = passwordEncrypted;
 	}
 
 	public Instant getCreatedAt() {
@@ -115,21 +102,5 @@ public class User {
 
 	public void setLockUntil(Instant lockUntil) {
 		this.lockUntil = lockUntil;
-	}
-
-	public String getAuthSalt() {
-		return authSalt;
-	}
-
-	public void setAuthSalt(String authSalt) {
-		this.authSalt = authSalt;
-	}
-
-	public String getIdentityFingerprint() {
-		return identityFingerprint;
-	}
-
-	public void setIdentityFingerprint(String identityFingerprint) {
-		this.identityFingerprint = identityFingerprint;
 	}
 }

@@ -1,14 +1,15 @@
-# API d’authentification — TP2 (Spring Boot)
+# API d’authentification — TP3 (Spring Boot)
 
-Back-end : **BCrypt**, **politique de mot de passe stricte**, **double confirmation** à l’inscription, **verrouillage** après échecs répétés, **jeton** en base ; `GET /api/me` protégé.
+Back-end : **mot de passe chiffré (SMK)** pour permettre la vérification **HMAC** côté serveur, **politique de mot de passe stricte**, **double confirmation** à l’inscription, **verrouillage** après échecs répétés, **jeton** en base, table **auth_nonce** ; `GET /api/me` protégé.
 
 > Ne commitez pas de secrets sur un dépôt public. Préférez variables d’environnement ou `application-local.properties` ignoré par Git.
 
 ## MySQL
 
-1. Script neuf : `src/main/resources/schema-mysql.sql` (colonnes `password_hash`, `failed_login_attempts`, `lock_until`).
-2. Depuis un ancien schéma TP1 : voir `schema-mysql-migration-tp1-to-tp2.sql` (souvent plus simple de recréer la base en dev).
-3. `application.properties` : URL (ex. port **3307**), utilisateur, mot de passe.
+1. Script neuf : `src/main/resources/schema-mysql.sql` — table `users` avec **`password_encrypted`**, table **`auth_nonce`**, `failed_login_attempts`, `lock_until`.
+2. Depuis TP2 (`password_hash`) : voir `schema-mysql-migration-tp2-to-tp3.sql` (souvent plus simple de recréer la base en dev : impossible de dériver le chiffrement SMK depuis un hash BCrypt sans resaisie du mot de passe).
+3. Depuis TP1 : `schema-mysql-migration-tp1-to-tp2.sql` (historique).
+4. `application.properties` : URL (ex. port **3307**), utilisateur, mot de passe, **`app.auth.server-master-key`**.
 
 ## Compte de démo
 
@@ -19,10 +20,12 @@ Créé au démarrage si absent :
 | Email | `toto@example.com` |
 | Mot de passe | **`Pwd1234!abcd`** (conforme TP2 : 12+ car., maj, min, chiffre, spécial) |
 
-*(En TP1 l’énoncé utilisait `pwd1234` en clair ; le TP2 impose une politique forte pour ce compte aussi.)*
+*(En TP1 l’énoncé utilisait `pwd1234` en clair ; les TP2/3 imposent une politique forte pour ce compte aussi.)*
 
-## Configuration TP2 (`application.properties`)
+## Configuration (`application.properties`)
 
+- `app.auth.server-master-key` — clé maître pour chiffrer les mots de passe (SMK).
+- `app.auth.timestamp-skew-seconds` / `app.auth.nonce-ttl-seconds` — fenêtre horaire et TTL nonce (TP3).
 - `app.auth.lock-duration` — durée du blocage après trop d’échecs (défaut `2m`).
 - `app.auth.max-failed-attempts` — nombre d’échecs avant blocage (défaut `5`).
 
@@ -31,7 +34,7 @@ Créé au démarrage si absent :
 | Méthode | Chemin | Remarques |
 |---------|--------|-----------|
 | POST | `/api/auth/register` | JSON `email`, `password`, `passwordConfirm` (identiques) |
-| POST | `/api/auth/login` | JSON `email`, `password` → réponse avec `token` |
+| POST | `/api/auth/login` | JSON `email`, `nonce`, `timestamp` (epoch s), `hmac` (hex) → réponse avec `token` |
 | GET | `/api/me` | `Authorization: Bearer <token>` ou `X-Auth-Token` |
 
 Erreurs JSON : `timestamp`, `status`, `error`, `message`, `path`.

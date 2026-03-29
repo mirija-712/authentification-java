@@ -1,30 +1,27 @@
 package com.example.authentification_back.config;
 
-import com.example.authentification_back.security.Tp3Proof;
 import com.example.authentification_back.entity.User;
 import com.example.authentification_back.repository.UserRepository;
+import com.example.authentification_back.security.PasswordEncryptionService;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /**
- * Compte de démonstration pour les tests et Postman. En TP2 le mot de passe doit respecter la politique stricte ;
- * l'email reste celui de l'énoncé ({@value #TEST_EMAIL}).
+ * Compte de démonstration (même email / mot de passe que les exemples du cours).
  */
 @Component
 public class TestAccountInitializer implements CommandLineRunner {
 
 	public static final String TEST_EMAIL = "toto@example.com";
 
-	/** Mot de passe conforme TP2 (12+ car., maj, min, chiffre, spécial) — à utiliser dans Postman pour ce compte. */
 	public static final String TEST_PASSWORD_PLAIN = "Pwd1234!abcd";
 
 	private final UserRepository userRepository;
-	private final PasswordEncoder passwordEncoder;
+	private final PasswordEncryptionService passwordEncryptionService;
 
-	public TestAccountInitializer(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+	public TestAccountInitializer(UserRepository userRepository, PasswordEncryptionService passwordEncryptionService) {
 		this.userRepository = userRepository;
-		this.passwordEncoder = passwordEncoder;
+		this.passwordEncryptionService = passwordEncryptionService;
 	}
 
 	@Override
@@ -32,13 +29,9 @@ public class TestAccountInitializer implements CommandLineRunner {
 		if (userRepository.existsByEmail(TEST_EMAIL)) {
 			return;
 		}
-		String authSalt = Tp3Proof.randomAuthSaltHex();
-		String fp = Tp3Proof.identityFingerprintHex(TEST_EMAIL, TEST_PASSWORD_PLAIN, authSalt);
 		User user = new User();
 		user.setEmail(TEST_EMAIL);
-		user.setPasswordHash(passwordEncoder.encode(TEST_PASSWORD_PLAIN));
-		user.setAuthSalt(authSalt);
-		user.setIdentityFingerprint(fp);
+		user.setPasswordEncrypted(passwordEncryptionService.encrypt(TEST_PASSWORD_PLAIN));
 		userRepository.save(user);
 	}
 }

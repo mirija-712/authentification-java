@@ -1,6 +1,6 @@
 package com.example.authentification_front.api;
 
-import com.example.authentification_front.security.Tp3Proof;
+import com.example.authentification_front.security.SsoHmac;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 
@@ -10,6 +10,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Client HTTP vers l'API REST Spring Boot ({@code authentification_back}).
@@ -40,31 +43,20 @@ public final class AuthApiClient {
 		return postJson("/api/auth/register", json, UserDto.class, 201);
 	}
 
-	public ApiResult<UserDto> login(String email, String password) {
-		String json = String.format("{\"email\":%s,\"password\":%s}",
-				gson.toJson(email), gson.toJson(password));
-		return postJson("/api/auth/login", json, UserDto.class, 200);
-	}
-
 	/**
-	 * TP3 : challenge puis login avec preuve HMAC (le mot de passe ne transite pas sur le POST /login).
+	 * TP3 : {@code POST /api/auth/login} avec {@code email}, {@code nonce}, {@code timestamp} (epoch s), {@code hmac} (hex).
+	 * Message signé : {@code email:nonce:timestamp} ; clé HMAC = mot de passe (UTF-8). Le mot de passe ne transite pas.
 	 */
-	public ApiResult<UserDto> loginWithTp3(String email, String password) {
-		ApiResult<ChallengeDto> ch = challenge(email);
-		if (ch instanceof ApiResult.Err<?> err) {
-			return new ApiResult.Err<>(err.message(), err.httpStatus());
-		}
-		ChallengeDto c = ((ApiResult.Ok<ChallengeDto>) ch).value();
-		String fp = Tp3Proof.identityFingerprintHex(email, password, c.authSalt);
-		String proof = Tp3Proof.proofHex(fp, c.nonce);
-		String json = String.format("{\"email\":%s,\"nonce\":%s,\"proof\":%s}",
-				gson.toJson(email), gson.toJson(c.nonce), gson.toJson(proof));
+	public ApiResult<UserDto> login(String email, String password) {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond();
+		String em = email.trim().toLowerCase(Locale.ROOT);
+		String msg = SsoHmac.messageToSign(em, nonce, ts);
+		String hmac = SsoHmac.hmacSha256Hex(password, msg);
+		String json = String.format(Locale.ROOT,
+				"{\"email\":%s,\"nonce\":%s,\"timestamp\":%d,\"hmac\":%s}",
+				gson.toJson(em), gson.toJson(nonce), ts, gson.toJson(hmac));
 		return postJson("/api/auth/login", json, UserDto.class, 200);
-	}
-
-	public ApiResult<ChallengeDto> challenge(String email) {
-		String json = String.format("{\"email\":%s}", gson.toJson(email));
-		return postJson("/api/auth/challenge", json, ChallengeDto.class, 200);
 	}
 
 	public ApiResult<UserDto> me(String bearerToken) {
@@ -123,13 +115,6 @@ public final class AuthApiClient {
 			// ignore
 		}
 		return json.length() > 200 ? json.substring(0, 200) + "…" : json;
-	}
-
-	/** Réponse {@code POST /api/auth/challenge}. */
-	public static class ChallengeDto {
-		public String nonce;
-		public String expiresAt;
-		public String authSalt;
 	}
 
 	/** DTO aligné sur le JSON du backend (champs publics pour Gson). */

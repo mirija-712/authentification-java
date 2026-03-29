@@ -77,11 +77,11 @@ public class AuthViewController {
 	private void onLogin() {
 		client = new AuthApiClient(apiBaseUrl.getText());
 		loginMessage.setStyle("-fx-text-fill: red;");
-		ApiResult<UserDto> r = client.loginWithTp3(loginEmail.getText(), loginPassword.getText());
+		ApiResult<UserDto> r = client.login(loginEmail.getText(), loginPassword.getText());
 		if (r instanceof ApiResult.Ok<?> ok) {
 			UserDto u = (UserDto) ok.value();
 			authToken = u.token;
-			loginMessage.setText("Connecté (TP3 : challenge + HMAC). ID=" + u.id + " — jeton pour /api/me.");
+			loginMessage.setText("Connecté (TP3 : HMAC email:nonce:timestamp). ID=" + u.id + " — jeton pour /api/me.");
 			loginMessage.setStyle("-fx-text-fill: green;");
 			profileHint.setText("Jeton actif : utilisez « Rafraîchir le profil ».");
 			fillProfileArea(u);

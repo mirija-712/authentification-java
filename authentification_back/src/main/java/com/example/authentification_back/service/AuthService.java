@@ -1,61 +1,59 @@
 package com.example.authentification_back.service;
 
 import com.example.authentification_back.config.AuthSecurityProperties;
-import com.example.authentification_back.security.Tp3Proof;
-import com.example.authentification_back.dto.ChallengeRequest;
-import com.example.authentification_back.dto.ChallengeResponse;
 import com.example.authentification_back.dto.LoginRequest;
 import com.example.authentification_back.dto.RegisterRequest;
 import com.example.authentification_back.dto.UserResponse;
-import com.example.authentification_back.entity.LoginNonce;
+import com.example.authentification_back.entity.AuthNonce;
 import com.example.authentification_back.entity.User;
 import com.example.authentification_back.exception.AccountLockedException;
 import com.example.authentification_back.exception.AuthenticationFailedException;
 import com.example.authentification_back.exception.InvalidInputException;
 import com.example.authentification_back.exception.ResourceConflictException;
-import com.example.authentification_back.repository.LoginNonceRepository;
+import com.example.authentification_back.repository.AuthNonceRepository;
 import com.example.authentification_back.repository.UserRepository;
+import com.example.authentification_back.security.PasswordEncryptionService;
+import com.example.authentification_back.security.SsoHmac;
 import com.example.authentification_back.validation.PasswordPolicyValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Service d'authentification TP2 (BCrypt, lockout) + TP3 (challenge/nonce + preuve HMAC).
+ * Authentification TP3 (SSO 2 étapes logiques, 1 échange réseau) : HMAC + nonce + timestamp, SMK pour le mot de passe.
  */
 @Service
 public class AuthService {
 
-	/** Message unique pour email inconnu ou mot de passe incorrect (recommandation sécurité TP2). */
 	public static final String GENERIC_LOGIN_ERROR = "Identifiants invalides";
 
 	private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
 	private final UserRepository userRepository;
-	private final LoginNonceRepository loginNonceRepository;
-	private final PasswordEncoder passwordEncoder;
+	private final AuthNonceRepository authNonceRepository;
+	private final PasswordEncryptionService passwordEncryptionService;
 	private final PasswordPolicyValidator passwordPolicyValidator;
 	private final AuthSecurityProperties authProperties;
 	private final Clock clock;
 
 	public AuthService(
 			UserRepository userRepository,
-			LoginNonceRepository loginNonceRepository,
-			PasswordEncoder passwordEncoder,
+			AuthNonceRepository authNonceRepository,
+			PasswordEncryptionService passwordEncryptionService,
 			PasswordPolicyValidator passwordPolicyValidator,
 			AuthSecurityProperties authProperties,
 			Clock clock) {
 		this.userRepository = userRepository;
-		this.loginNonceRepository = loginNonceRepository;
-		this.passwordEncoder = passwordEncoder;
+		this.authNonceRepository = authNonceRepository;
+		this.passwordEncryptionService = passwordEncryptionService;
 		this.passwordPolicyValidator = passwordPolicyValidator;
 		this.authProperties = authProperties;
 		this.clock = clock;
@@ -73,122 +71,66 @@ public class AuthService {
 			log.warn("Inscription échouée: email déjà utilisé ({})", email);
 			throw new ResourceConflictException("Cet email est déjà enregistré");
 		}
-		String authSalt = Tp3Proof.randomAuthSaltHex();
-		String fingerprint = Tp3Proof.identityFingerprintHex(email, request.password(), authSalt);
 		User user = new User();
 		user.setEmail(email);
-		user.setPasswordHash(passwordEncoder.encode(request.password()));
-		user.setAuthSalt(authSalt);
-		user.setIdentityFingerprint(fingerprint);
+		user.setPasswordEncrypted(passwordEncryptionService.encrypt(request.password()));
 		userRepository.save(user);
 		log.info("Inscription réussie pour l'utilisateur id={} email={}", user.getId(), email);
 		return UserResponse.profile(user);
 	}
 
 	/**
-	 * Émet un nonce à usage unique pour l’email (TP3). Réponse générique si l’email est inconnu (énumération).
-	 */
-	@Transactional
-	public ChallengeResponse createChallenge(ChallengeRequest request) {
-		String email = normalizeEmail(request.email());
-		Optional<User> opt = userRepository.findByEmail(email);
-		if (opt.isEmpty()) {
-			log.warn("Challenge refusé: email inconnu");
-			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
-		}
-		User user = opt.get();
-		if (user.getIdentityFingerprint() == null || user.getIdentityFingerprint().isBlank()
-				|| user.getAuthSalt() == null || user.getAuthSalt().isBlank()) {
-			throw new InvalidInputException(
-					"Compte non éligible au login TP3 : utilisez la connexion par mot de passe.");
-		}
-		String nonce = UUID.randomUUID().toString();
-		Instant expires = clock.instant().plus(authProperties.getChallengeTtl());
-		LoginNonce row = new LoginNonce();
-		row.setNonce(nonce);
-		row.setEmail(email);
-		row.setExpiresAt(expires);
-		row.setConsumed(false);
-		loginNonceRepository.save(row);
-		return new ChallengeResponse(nonce, expires.toString(), user.getAuthSalt());
-	}
-
-	/**
-	 * Les échecs de connexion doivent être persistés (compteur + verrou) même en répondant 401 :
-	 * sans {@code noRollbackFor}, la transaction annulerait le {@code save} avant le throw.
+	 * Ordre des vérifications aligné sur les slides : email → timestamp → nonce → déchiffrement → HMAC (temps constant).
 	 */
 	@Transactional(noRollbackFor = AuthenticationFailedException.class)
 	public UserResponse login(LoginRequest request) {
 		String email = normalizeEmail(request.email());
-		boolean hasPassword = request.password() != null && !request.password().isBlank();
-		boolean hasProof = request.nonce() != null && !request.nonce().isBlank()
-				&& request.proof() != null && !request.proof().isBlank();
-		if (hasPassword == hasProof) {
-			throw new InvalidInputException(
-					"Envoyez soit le mot de passe (TP2), soit nonce+proof sans mot de passe (TP3).");
-		}
-		if (hasPassword) {
-			return loginWithPassword(email, request.password());
-		}
-		return loginWithProof(email, request.nonce(), request.proof());
-	}
-
-	private UserResponse loginWithPassword(String email, String rawPassword) {
 		Instant now = clock.instant();
+
 		Optional<User> optUser = userRepository.findByEmail(email);
 		if (optUser.isEmpty()) {
-			log.warn("Connexion échouée: identifiants invalides (email non reconnu)");
+			log.warn("Connexion échouée: email non reconnu");
 			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
 		}
 		User user = optUser.get();
+
 		assertNotLocked(user, now);
 		clearExpiredLockIfNeeded(user, now);
 
-		if (passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
-			return grantSession(user, email);
-		}
-		registerFailureAndThrow(user, email, now);
-		throw new IllegalStateException("registerFailureAndThrow doit lever une exception");
-	}
-
-	private UserResponse loginWithProof(String email, String nonce, String proofHex) {
-		Instant now = clock.instant();
-		Optional<User> optUser = userRepository.findByEmail(email);
-		if (optUser.isEmpty()) {
-			log.warn("Connexion TP3 échouée: email inconnu");
+		Instant clientTs = Instant.ofEpochSecond(request.timestamp());
+		long skewSeconds = Math.abs(Duration.between(now, clientTs).getSeconds());
+		if (skewSeconds > authProperties.getTimestampSkewSeconds()) {
+			log.warn("Connexion refusée: timestamp hors fenêtre (skew={}s)", skewSeconds);
 			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
 		}
-		User user = optUser.get();
-		assertNotLocked(user, now);
-		clearExpiredLockIfNeeded(user, now);
 
-		if (user.getIdentityFingerprint() == null || user.getIdentityFingerprint().isBlank()) {
-			throw new InvalidInputException("Connexion TP3 indisponible pour ce compte.");
+		if (authNonceRepository.existsByUserIdAndNonce(user.getId(), request.nonce())) {
+			log.warn("Connexion refusée: nonce déjà utilisé (rejeu) userId={}", user.getId());
+			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
 		}
 
-		Optional<LoginNonce> optNonce = loginNonceRepository.findByNonce(nonce);
-		if (optNonce.isEmpty()) {
-			log.warn("Connexion TP3 échouée: nonce inconnu");
-			registerFailureAndThrow(user, email, now);
+		String plainPassword;
+		try {
+			plainPassword = passwordEncryptionService.decrypt(user.getPasswordEncrypted());
+		} catch (Exception e) {
+			log.warn("Déchiffrement impossible pour user id={}", user.getId());
+			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
 		}
-		LoginNonce row = optNonce.get();
-		if (!email.equals(row.getEmail())) {
-			log.warn("Connexion TP3 échouée: nonce/email incohérents");
-			registerFailureAndThrow(user, email, now);
-		}
-		if (row.isConsumed() || row.getExpiresAt().isBefore(now)) {
-			log.warn("Connexion TP3 échouée: nonce expiré ou déjà utilisé");
+
+		String message = SsoHmac.messageToSign(email, request.nonce(), request.timestamp());
+		String expectedHex = SsoHmac.hmacSha256Hex(plainPassword, message);
+		if (!SsoHmac.constantTimeEqualsHex(expectedHex, request.hmac())) {
+			log.warn("Connexion échouée: HMAC incorrect (tentative {}/{})",
+					user.getFailedLoginAttempts() + 1, authProperties.getMaxFailedAttempts());
 			registerFailureAndThrow(user, email, now);
 		}
 
-		String expected = Tp3Proof.proofHex(user.getIdentityFingerprint(), nonce);
-		row.setConsumed(true);
-		loginNonceRepository.save(row);
-
-		if (!Tp3Proof.constantTimeEqualsHex(expected, proofHex)) {
-			log.warn("Connexion TP3 échouée: preuve HMAC incorrecte");
-			registerFailureAndThrow(user, email, now);
-		}
+		AuthNonce nonceRow = new AuthNonce();
+		nonceRow.setUserId(user.getId());
+		nonceRow.setNonce(request.nonce());
+		nonceRow.setExpiresAt(now.plusSeconds(authProperties.getNonceTtlSeconds()));
+		nonceRow.setConsumed(true);
+		authNonceRepository.save(nonceRow);
 
 		return grantSession(user, email);
 	}

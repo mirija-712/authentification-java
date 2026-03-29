@@ -1,17 +1,17 @@
 package com.example.authentification_back.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 /**
- * Connexion TP2 ({@code password} seul) ou TP3 ({@code nonce} + {@code proof}, sans mot de passe).
+ * SSO TP3 — une seule requête : {@code email}, {@code nonce}, {@code timestamp} (epoch secondes), {@code hmac} (hex).
+ * Le mot de passe ne transite pas.
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public record LoginRequest(
 		@NotBlank @Email String email,
-		String password,
-		String nonce,
-		String proof
+		@NotBlank String nonce,
+		@NotNull Long timestamp,
+		@NotBlank String hmac
 ) {
 }

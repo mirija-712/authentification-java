@@ -1,7 +1,5 @@
 package com.example.authentification_back.controller;
 
-import com.example.authentification_back.dto.ChallengeRequest;
-import com.example.authentification_back.dto.ChallengeResponse;
 import com.example.authentification_back.dto.LoginRequest;
 import com.example.authentification_back.dto.RegisterRequest;
 import com.example.authentification_back.dto.UserResponse;
@@ -18,9 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Contrôleur REST : inscription, login TP2 (mot de passe) ou TP3 (nonce + preuve HMAC), challenge TP3, profil.
- *
- * @see AuthService
+ * API TP3 : inscription, {@code POST /api/auth/login} avec email / nonce / timestamp / hmac, profil {@code /api/me}.
  */
 @RestController
 @RequestMapping("/api")
@@ -32,11 +28,6 @@ public class AuthController {
 		this.authService = authService;
 	}
 
-	/**
-	 * Inscription d'un nouvel utilisateur.
-	 *
-	 * @return 201 avec le profil créé (sans jeton ; le jeton n'est obtenu qu'après {@link #login}).
-	 */
 	@PostMapping("/auth/register")
 	public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
 		UserResponse body = authService.register(request);
@@ -44,29 +35,13 @@ public class AuthController {
 	}
 
 	/**
-	 * Challenge TP3 : retourne un nonce à usage unique et le sel public pour calculer la preuve côté client.
-	 */
-	@PostMapping("/auth/challenge")
-	public ResponseEntity<ChallengeResponse> challenge(@Valid @RequestBody ChallengeRequest request) {
-		return ResponseEntity.ok(authService.createChallenge(request));
-	}
-
-	/**
-	 * Connexion : soit {@code password} (TP2), soit {@code nonce} + {@code proof} sans mot de passe (TP3).
-	 *
-	 * @return 200 avec le profil et le champ {@code token} à réutiliser pour {@link #me}.
+	 * SSO — corps : {@code email}, {@code nonce}, {@code timestamp} (epoch s), {@code hmac} (hex).
 	 */
 	@PostMapping("/auth/login")
 	public ResponseEntity<UserResponse> login(@Valid @RequestBody LoginRequest request) {
-		UserResponse body = authService.login(request);
-		return ResponseEntity.ok(body);
+		return ResponseEntity.ok(authService.login(request));
 	}
 
-	/**
-	 * Route protégée : lecture du profil de l'utilisateur identifié par le jeton.
-	 * <p>
-	 * Chemin exact : {@code GET /api/me} (pas {@code /api/auth/me}).
-	 */
 	@GetMapping("/me")
 	public ResponseEntity<UserResponse> me(
 			@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
@@ -75,9 +50,6 @@ public class AuthController {
 		return ResponseEntity.ok(authService.currentUser(resolved));
 	}
 
-	/**
-	 * Priorité au schéma Bearer standard ; sinon repli sur l'en-tête personnalisé (pratique Postman).
-	 */
 	private static String resolveToken(String authorization, String authToken) {
 		String bearer = extractBearer(authorization);
 		if (bearer != null && !bearer.isBlank()) {
@@ -86,7 +58,6 @@ public class AuthController {
 		return authToken;
 	}
 
-	/** Extrait la valeur après le préfixe {@code Bearer } (insensible à la casse sur le mot Bearer). */
 	private static String extractBearer(String authorization) {
 		if (authorization == null || authorization.isBlank()) {
 			return null;
@@ -95,7 +66,6 @@ public class AuthController {
 		if (trimmed.regionMatches(true, 0, "Bearer ", 0, 7)) {
 			return trimmed.substring(7).trim();
 		}
-		// Tolère un token brut passé dans Authorization sans préfixe (peu recommandé mais pratique en TP)
 		return trimmed;
 	}
 }
