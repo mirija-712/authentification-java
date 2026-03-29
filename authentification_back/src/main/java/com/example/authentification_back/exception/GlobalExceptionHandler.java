@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 
 /**
  * Intercepte les exceptions métier et les erreurs de validation Bean Validation pour renvoyer
- * toujours un JSON {@link ApiErrorResponse} cohérent (TP1).
+ * toujours un JSON {@link ApiErrorResponse} cohérent (TP1 / TP2).
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -21,6 +21,11 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidInputException.class)
 	public ResponseEntity<ApiErrorResponse> handleInvalid(InvalidInputException ex, HttpServletRequest req) {
 		return build(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
+	}
+
+	@ExceptionHandler(AccountLockedException.class)
+	public ResponseEntity<ApiErrorResponse> handleLocked(AccountLockedException ex, HttpServletRequest req) {
+		return build(HttpStatus.LOCKED, ex.getMessage(), req);
 	}
 
 	@ExceptionHandler(AuthenticationFailedException.class)

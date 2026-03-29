@@ -11,10 +11,9 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * Entité JPA mappée sur la table {@code users} (MySQL).
+ * Entité utilisateur (TP2) : mot de passe haché avec BCrypt, compteur d'échecs et verrouillage temporaire.
  * <p>
- * Cette implémentation est volontairement dangereuse et ne doit jamais être utilisée en production
- * (mot de passe stocké en clair). Le jeton d'accès est stocké en base après login (variante TP1).
+ * TP2 améliore le stockage mais ne protège pas encore contre le rejeu (TP3). Le jeton reste une solution TP1/2 pragmatique.
  */
 @Entity
 @Table(name = "users")
@@ -24,24 +23,26 @@ public class User {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	/** Identifiant de connexion ; unique côté base. */
 	@Column(nullable = false, unique = true, length = 255)
 	private String email;
 
-	/** Mot de passe en clair — uniquement pour le TP1 pédagogique. */
-	@Column(name = "password_clear", nullable = false)
-	private String passwordClear;
+	/** Hachage BCrypt du mot de passe (jamais le mot de passe en clair). */
+	@Column(name = "password_hash", nullable = false, length = 80)
+	private String passwordHash;
 
-	/** Horodatage de création du compte (renseigné dans {@link #prePersist} si absent). */
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
-	/**
-	 * Jeton généré au login (UUID) ; {@code null} tant que l'utilisateur ne s'est pas connecté.
-	 * Unique lorsqu'il est non nul.
-	 */
 	@Column(unique = true, length = 64)
 	private String token;
+
+	/** Nombre de tentatives de login incorrectes consécutives (remis à 0 après succès). */
+	@Column(name = "failed_login_attempts", nullable = false)
+	private int failedLoginAttempts = 0;
+
+	/** Fin de période de blocage ; null si le compte n'est pas verrouillé. */
+	@Column(name = "lock_until")
+	private Instant lockUntil;
 
 	@PrePersist
 	void prePersist() {
@@ -66,12 +67,12 @@ public class User {
 		this.email = email;
 	}
 
-	public String getPasswordClear() {
-		return passwordClear;
+	public String getPasswordHash() {
+		return passwordHash;
 	}
 
-	public void setPasswordClear(String passwordClear) {
-		this.passwordClear = passwordClear;
+	public void setPasswordHash(String passwordHash) {
+		this.passwordHash = passwordHash;
 	}
 
 	public Instant getCreatedAt() {
@@ -88,5 +89,21 @@ public class User {
 
 	public void setToken(String token) {
 		this.token = token;
+	}
+
+	public int getFailedLoginAttempts() {
+		return failedLoginAttempts;
+	}
+
+	public void setFailedLoginAttempts(int failedLoginAttempts) {
+		this.failedLoginAttempts = failedLoginAttempts;
+	}
+
+	public Instant getLockUntil() {
+		return lockUntil;
+	}
+
+	public void setLockUntil(Instant lockUntil) {
+		this.lockUntil = lockUntil;
 	}
 }

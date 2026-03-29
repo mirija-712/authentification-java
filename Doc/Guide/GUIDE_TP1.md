@@ -1,209 +1,161 @@
-# Guide détaillé — TP1 Serveur d’authentification (API REST Spring Boot)
+# Guide détaillé — TP1 (fondations et contexte)
 
-Ce document reprend le **TP1** du PDF *TP 1-4 Auth Server* et explique l’implémentation du projet `authentification_back` pour que vous puissiez **la comprendre et la recoder** dans le bon ordre.
+Ce document explique **le premier travail pratique** du module *Serveur d’authentification* : objectifs, architecture, données, HTTP et ce que signifie une API « **volontairement dangereuse** ».
 
----
+**Table des matières :** sections **1 à 11** ci‑dessous (objectifs, architecture, SQL, HTTP, flux, DTO, tests, évolution TP2/TP3, synthèse).
 
-## 1. Objectif du TP1
-
-- Mettre en place une authentification **volontairement faible** (pédagogique), **inacceptable en production**.
-- Comprendre pourquoi « ça marche » ne suffit pas côté sécurité.
-- Livrer une **API REST** avec **MySQL**, **gestion d’erreurs JSON**, **tests JUnit**, **logging fichier**, **JavaDoc**.
-
-**Variante retenue dans ce projet** (le sujet autorise l’une ou l’autre) :
-
-- **Jeton** généré au login, **stocké en colonne `token`** en base, envoyé au client ; les appels protégés passent le jeton en en-tête (`Authorization: Bearer …` ou `X-Auth-Token`).
-
-*(L’autre option du sujet est une **session HTTP** avec cookie `JSESSIONID` — non utilisée ici.)*
+> **Note sur le dépôt :** le code dans `authentification_back` a ensuite évolué vers le **TP2** (BCrypt, politique stricte, verrouillage). Les extraits ci‑dessous marqués **« référence TP1 »** décrivent ce que le sujet demandait au **TP1** ; le détail du **code actuel** (TP1+TP2) est dans [GUIDE_TP2.md](./GUIDE_TP2.md).
 
 ---
 
-## 2. Cahier des charges fonctionnel (rappel)
+## 1. Objectifs du TP1 (rappel sujet)
 
-| Élément | Détail |
-|--------|--------|
-| Inscription | `POST` avec email + mot de passe |
-| Règle mot de passe | **Minimum 4 caractères** (volontairement faible) |
-| Serveur | Email **unique** ; mot de passe en **clair** (`password_clear`) |
-| Login | `POST` vérifie email + mot de passe |
-| Compte test | `toto@example.com` / `pwd1234` |
-| Route protégée | `GET /api/me` — uniquement si authentifié (ici : jeton valide) |
-
----
-
-## 3. Modèle de données MySQL
-
-Table **`users`** (voir `authentification_back/src/main/resources/schema-mysql.sql`) :
-
-| Colonne | Rôle |
-|---------|------|
-| `id` | Clé primaire auto-incrémentée |
-| `email` | Unique, identifiant de connexion |
-| `password_clear` | Mot de passe **en clair** (TP1 uniquement) |
-| `created_at` | Date de création du compte |
-| `token` | Jeton d’accès après login (nullable avant première connexion) |
-
-Contraintes : `email` unique, `token` unique (plusieurs `NULL` autorisés en MySQL pour une colonne unique).
+- Mettre en place une **API REST** avec **Spring Boot** et **MySQL**.
+- Accepter une authentification **fonctionnelle mais incorrecte pour la production** (mot de passe **en clair** en base, règles de mot de passe **faibles** : minimum **4 caractères**).
+- Exposer :
+  - **Inscription** `POST /api/auth/register`
+  - **Connexion** `POST /api/auth/login`
+  - **Profil** `GET /api/me` (réservé aux utilisateurs authentifiés)
+- Gérer les erreurs avec des **exceptions métier** et un **`@ControllerAdvice`** qui renvoie toujours le **même format JSON** (`timestamp`, `status`, `error`, `message`, `path`).
+- Écrire des **tests JUnit**, du **JavaDoc**, un **README** avec analyse de sécurité (au moins 5 risques).
+- Option d’auth : **session HTTP** **ou** **jeton stocké en base** (dans ce projet : **jeton** en colonne `token`).
 
 ---
 
-## 4. Structure des packages (couches)
+## 2. Architecture logique (couches)
 
 ```
-com.example.authentification_back
-├── AuthentificationBackApplication.java   # Point d’entrée Spring Boot
-├── controller/     # REST : HTTP ↔ DTO
-├── service/        # Règles métier, transactions
-├── repository/     # Accès base (Spring Data JPA)
-├── entity/         # Modèle JPA ↔ table MySQL
-├── dto/            # Objets échangés en JSON (requêtes / réponses)
-├── exception/      # Exceptions métier + @ControllerAdvice global
-└── config/         # Initialisation (ex. compte de test toto)
+Client (Postman, futur client Java)
+        │  JSON (HTTP)
+        ▼
+┌───────────────────┐
+│   Controller      │  ← DTO d’entrée (@Valid), codes HTTP (201, 200, …)
+└─────────┬─────────┘
+          │
+┌─────────▼─────────┐
+│   Service         │  ← Règles métier, transactions
+└─────────┬─────────┘
+          │
+┌─────────▼─────────┐
+│   Repository      │  ← Spring Data JPA (CRUD, requêtes dérivées)
+└─────────┬─────────┘
+          │
+┌─────────▼─────────┐
+│   Base MySQL      │  ← Table users
+└───────────────────┘
 ```
 
-Ordre logique pour **recoder** :
-
-1. Entité + repository + script SQL  
-2. DTO + validation  
-3. Exceptions + `GlobalExceptionHandler`  
-4. `AuthService` (register, login, currentUser)  
-5. `AuthController`  
-6. Compte test (`CommandLineRunner`)  
-7. `application.properties` + tests  
+- **`@RestController`** : transforme automatiquement les objets Java en **JSON** (via Jackson).
+- **`@Service`** : contient la logique ; **`@Transactional`** garantit une transaction base par méthode quand c’est nécessaire.
+- **`JpaRepository`** : évite d’écrire du SQL pour les opérations simples (`save`, `findById`, méthodes `findBy…` dérivées du nom).
 
 ---
 
-## 5. Configuration (`application.properties`)
+## 3. Modèle de données « référence TP1 »
 
-Points importants :
+Le sujet imposait une table minimale du type :
 
-- **URL JDBC** : port MySQL (ex. `3307`), nom de la base (ex. `authentification`).
-- **`spring.jpa.hibernate.ddl-auto=update`** : Hibernate met à jour le schéma à partir des entités (pratique en dev ; en production on préfère des migrations versionnées).
-- **Logging fichier** : `logging.file.name=logs/authentification.log` — **ne jamais y écrire les mots de passe**.
+| Colonne          | Rôle |
+|------------------|------|
+| `id`             | Clé primaire |
+| `email`          | Unique |
+| `password_clear` | Mot de passe **en clair** (interdit en prod) |
+| `created_at`     | Date de création |
 
----
+**Exemple SQL (TP1) :**
 
-## 6. Endpoints HTTP
+```sql
+CREATE TABLE users (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_clear VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP(6) NOT NULL
+);
+```
 
-| Méthode | Chemin | Corps / en-têtes | Réponse typique |
-|---------|--------|------------------|-----------------|
-| `POST` | `/api/auth/register` | JSON `{ "email", "password" }` | **201** + `id`, `email`, `createdAt` (pas de `token`) |
-| `POST` | `/api/auth/login` | JSON `{ "email", "password" }` | **200** + `id`, `email`, `createdAt`, **`token`** |
-| `GET` | `/api/me` | `Authorization: Bearer <token>` **ou** `X-Auth-Token: <token>` | **200** + `id`, `email`, `createdAt` |
-
-**Attention** : la route profil est **`/api/me`**, pas `/api/auth/me`.
-
-### Codes HTTP d’erreur (gérés par `GlobalExceptionHandler`)
-
-- **400** : données invalides (`InvalidInputException`, erreurs Bean Validation `@Valid`)
-- **401** : login échoué ou jeton absent/invalide (`AuthenticationFailedException`)
-- **409** : email déjà enregistré (`ResourceConflictException`)
-
-Le corps d’erreur suit `ApiErrorResponse` : `timestamp`, `status`, `error`, `message`, `path`.
+En **variante jeton**, on ajoute une colonne **`token`** (nullable, unique quand non null) pour stocker le jeton émis au login.
 
 ---
 
-## 7. Flux détaillés
+## 4. Endpoints et codes HTTP (TP1)
 
-### 7.1 Inscription (`register`)
+| Situation | Code | Exception typique |
+|-----------|------|-------------------|
+| Données invalides (email, mot de passe trop court, etc.) | **400** | `InvalidInputException` ou erreurs `@Valid` |
+| Login refusé (mauvais mot de passe, etc.) | **401** | `AuthenticationFailedException` |
+| Email déjà pris | **409** | `ResourceConflictException` |
+| Succès inscription | **201** | — |
+| Succès login / profil | **200** | — |
 
-1. Le client envoie `RegisterRequest` (validé par `@Valid` : `@Email`, `@Size(min=4)`, etc.).
-2. `AuthService` normalise l’email (trim + minuscules).
-3. Vérification longueur mot de passe ≥ 4 (doublon côté service avec la validation).
-4. Si email déjà présent → `ResourceConflictException` → **409**.
-5. Création `User`, sauvegarde ; **pas de token** tant que l’utilisateur ne s’est pas connecté.
-
-### 7.2 Connexion (`login`)
-
-1. Recherche utilisateur par email ; si absent → **401** « Email inconnu ».
-2. Comparaison **en clair** du mot de passe (TP1) ; si différent → **401** « Mot de passe incorrect ».
-3. Génération d’un **`UUID`** string, affectation à `user.token`, `save`.
-4. Réponse JSON avec `UserResponse.login(user, token)` — le champ `token` est sérialisé grâce à `@JsonInclude(NON_NULL)` sur les autres réponses où le token est `null`.
-
-### 7.3 Profil (`/api/me`)
-
-1. `AuthController` lit `Authorization` (préfixe `Bearer `) ou `X-Auth-Token`.
-2. `AuthService.currentUser(token)` : si vide → **401** ; sinon `findByToken` ; si inconnu → **401** « Token invalide ».
-3. Réponse profil via `UserResponse.profile()` → **pas de champ `token`** dans le JSON.
+Le **`GlobalExceptionHandler`** centralise la traduction **exception → JSON** pour que le client ne reçoive pas des pages d’erreur HTML opaques.
 
 ---
 
-## 8. Fichiers clés du projet (références)
+## 5. Flux « inscription » (logique TP1)
 
-| Fichier | Rôle |
-|---------|------|
-| `entity/User.java` | Mapping JPA, colonnes dont `password_clear`, `token` |
-| `repository/UserRepository.java` | `findByEmail`, `findByToken`, `existsByEmail` |
-| `dto/RegisterRequest.java`, `LoginRequest.java` | Entrées JSON + contraintes Bean Validation |
-| `dto/UserResponse.java` | Sorties ; fabriques `profile` / `login` |
-| `dto/ApiErrorResponse.java` | Format d’erreur uniforme |
-| `exception/*.java` | Exceptions métier |
-| `exception/GlobalExceptionHandler.java` | Traduction exception → HTTP + JSON |
-| `service/AuthService.java` | Cœur métier |
-| `controller/AuthController.java` | Mapping REST |
-| `config/TestAccountInitializer.java` | Création du compte `toto@example.com` au démarrage s’il manque |
-| `resources/schema-mysql.sql` | Script SQL Workbench |
-| `src/test/.../AuthApiIntegrationTest.java` | Tests d’intégration MockMvc |
+1. Le client envoie `email` + `password` (et en TP2 ensuite `passwordConfirm`).
+2. Le **contrôleur** valide le format (`@Valid`).
+3. Le **service** vérifie les règles (unicité email, longueur minimale, etc.).
+4. En TP1 on **persistait** `password_clear` tel quel.
+5. Réponse : identité du user **sans** exposer le mot de passe.
 
 ---
 
-## 9. Tests JUnit (idées à couvrir)
+## 6. Flux « connexion » avec jeton (logique)
 
-Le TP demande au minimum **8 tests** ; le projet en contient davantage, par exemple :
-
-- Email invalide → **400**
-- Mot de passe &lt; 4 caractères → **400**
-- Inscription OK
-- Inscription doublon → **409**
-- Login OK + présence du `token`
-- Login mauvais mot de passe → **401**
-- Email inconnu → **401**
-- `GET /api/me` sans jeton → **401**
-- `GET /api/me` avec `Bearer` après login → **200**
-
-Profil **`test`** : H2 en mémoire (`application-test.properties`) pour ne pas dépendre de MySQL pendant `mvn test`.
+1. Vérifier email + mot de passe (en TP1 : comparaison **en clair** `password_clear.equals(...)`).
+2. Si OK : générer un **UUID** (ou équivalent), le **sauver** dans `users.token`, le **renvoyer** dans le JSON de réponse.
+3. Le client envoie ensuite `Authorization: Bearer <token>` (ou `X-Auth-Token`) pour **`GET /api/me`**.
+4. Le service cherche l’utilisateur par **`findByToken`** ; si absent → **401**.
 
 ---
 
-## 10. Postman (rappel)
+## 7. Extrait « service d’auth » simplifié (référence TP1, mot de passe en clair)
 
-1. `POST /api/auth/login` avec le compte `toto` → copier le **`token`** dans la réponse.
-2. `GET http://localhost:8080/api/me` avec en-tête **`Authorization`** : `Bearer <token>` (ou `X-Auth-Token`).
+> *Illustration pédagogique — ne pas reproduire en production.*
 
----
+```java
+// Pseudo-code TP1 : comparaison en clair (à ne plus faire après TP2)
+if (!user.getPasswordClear().equals(request.password())) {
+    throw new AuthenticationFailedException("Mot de passe incorrect");
+}
+```
 
-## 11. Analyse de sécurité (minimum TP1)
-
-À rédiger dans votre README : au moins **5 risques** (ex. mots de passe en clair, pas de hachage, jeton sans expiration, pas de HTTPS, énumération d’emails sur les messages d’erreur, etc.).
-
----
-
-## 12. Pour aller plus loin (TP2+)
-
-Le TP2 introduit : politique de mot de passe forte, **BCrypt**, verrouillage anti brute-force, SonarCloud, etc. Le protocole HMAC arrive **au TP3**.
+Au **TP2**, cette comparaison est remplacée par **`passwordEncoder.matches(motSaisi, user.getPasswordHash())`**.
 
 ---
 
-## 13. Annexe — où trouver le code commenté
+## 8. DTO, validation et sérialisation
 
-Le détail ligne à ligne est dans le dépôt Maven :
-
-| Fichier | Rôle |
-|---------|------|
-| `authentification_back/src/main/java/.../AuthentificationBackApplication.java` | `main`, lancement Spring Boot |
-| `.../entity/User.java` | Entité JPA |
-| `.../repository/UserRepository.java` | Spring Data |
-| `.../dto/*.java` | DTO + validation |
-| `.../exception/*.java` | Exceptions + `GlobalExceptionHandler` |
-| `.../service/AuthService.java` | Règles métier |
-| `.../controller/AuthController.java` | REST |
-| `.../config/TestAccountInitializer.java` | Compte `toto` |
-| `src/main/resources/application.properties` | DataSource, JPA, logs |
-| `src/main/resources/schema-mysql.sql` | Script MySQL |
-| `src/test/.../AuthApiIntegrationTest.java` | Tests |
-
-Recopier le TP1 à la main : suivre l’ordre de la section 4, en collant ou en retapant chaque fichier depuis l’IDE.
+- **`record`** (Java 16+) : classes immuables adaptées aux JSON d’entrée/sortie.
+- **`jakarta.validation`** : `@NotBlank`, `@Email`, `@Valid` sur le contrôleur pour rejeter tôt les entrées invalides (**400**).
+- **`@JsonInclude(NON_NULL)`** sur la réponse : évite d’envoyer `"token": null` quand on ne veut pas exposer le champ.
 
 ---
 
-*Ce guide décrit l’état du dépôt `authentification_back` au moment de sa rédaction ; les fichiers sources commentés restent la référence exacte pour le comportement.*
+## 9. Tests (idées TP1)
+
+- Email invalide, mot de passe trop court, inscription OK, doublon email, login OK/KO, `/api/me` sans jeton, `/api/me` avec jeton après login.
+
+En **TP2**, on ajoute des tests sur la **politique de mot de passe**, le **verrouillage**, le **message générique** de login, etc.
+
+---
+
+## 10. Pour aller plus loin : TP2 et TP3
+
+- **TP2** : BCrypt, politique forte, anti brute-force, SonarCloud, couverture. Voir **[GUIDE_TP2.md](./GUIDE_TP2.md)** pour le **code source commenté intégral** du projet actuel.
+- **TP3** : protocole HMAC / nonce (pas de mot de passe qui transite comme « preuve » simple).
+
+---
+
+## 11. Synthèse
+
+| TP1 | Limite volontaire |
+|-----|-------------------|
+| Mot de passe en clair ou faible | Fuite base = comptes compromis |
+| Jeton sans expiration | Vol de jeton = session piratée |
+| Pas de rate limiting (TP1) | Brute-force sur le login (partiellement corrigé au TP2) |
+
+Ce guide pose le **vocabulaire** et les **flux**.
+
+Pour le **code source complet** du projet actuel (TP2) avec l’**annexe A** (copie intégrale des fichiers principaux + tests), ouvrez **[GUIDE_TP2.md](./GUIDE_TP2.md)** — c’est le document le plus détaillé pour tout recoder depuis zéro. Le même guide décrit le **client JavaFX** `authentification_front` (couplage HTTP avec le backend).

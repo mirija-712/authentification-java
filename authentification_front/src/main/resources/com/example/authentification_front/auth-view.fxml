@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.example.authentification_front.AuthViewController">
+    <top>
+        <HBox spacing="10" alignment="CENTER_LEFT">
+            <padding>
+                <Insets top="12" right="16" bottom="8" left="16"/>
+            </padding>
+            <Label text="URL de l'API :"/>
+            <TextField fx:id="apiBaseUrl" prefColumnCount="40" promptText="http://localhost:8080"/>
+        </HBox>
+    </top>
+    <center>
+        <TabPane tabClosingPolicy="UNAVAILABLE" BorderPane.alignment="CENTER">
+            <Tab text="Connexion">
+                <VBox spacing="10">
+                    <padding>
+                        <Insets top="16" right="16" bottom="16" left="16"/>
+                    </padding>
+                    <GridPane hgap="10" vgap="8">
+                        <Label text="Email :" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                        <TextField fx:id="loginEmail" promptText="vous@example.com" GridPane.columnIndex="1"
+                                   GridPane.rowIndex="0" prefWidth="320"/>
+                        <Label text="Mot de passe :" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                        <PasswordField fx:id="loginPassword" GridPane.columnIndex="1" GridPane.rowIndex="1"
+                                       prefWidth="320"/>
+                    </GridPane>
+                    <HBox spacing="10">
+                        <Button text="Se connecter" onAction="#onLogin" defaultButton="true"/>
+                    </HBox>
+                    <Label fx:id="loginMessage" wrapText="true" maxWidth="600"/>
+                </VBox>
+            </Tab>
+            <Tab text="Inscription">
+                <VBox spacing="10">
+                    <padding>
+                        <Insets top="16" right="16" bottom="16" left="16"/>
+                    </padding>
+                    <GridPane hgap="10" vgap="8">
+                        <Label text="Email :" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                        <TextField fx:id="regEmail" GridPane.columnIndex="1" GridPane.rowIndex="0" prefWidth="320"/>
+                        <Label text="Mot de passe :" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                        <PasswordField fx:id="regPassword" GridPane.columnIndex="1" GridPane.rowIndex="1"
+                                       prefWidth="320"/>
+                        <Label text="Confirmation :" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+                        <PasswordField fx:id="regConfirm" GridPane.columnIndex="1" GridPane.rowIndex="2"
+                                       prefWidth="320"/>
+                    </GridPane>
+                    <Label fx:id="strengthLabel" text="Force : —"/>
+                    <HBox spacing="10">
+                        <Button text="S'inscrire" onAction="#onRegister"/>
+                    </HBox>
+                    <Label fx:id="registerMessage" wrapText="true" maxWidth="600"/>
+                </VBox>
+            </Tab>
+            <Tab text="Profil">
+                <VBox spacing="10">
+                    <padding>
+                        <Insets top="16" right="16" bottom="16" left="16"/>
+                    </padding>
+                    <Label text="Données renvoyées par GET /api/me (Bearer) :"/>
+                    <TextArea fx:id="profileArea" editable="false" prefRowCount="8" wrapText="true" prefWidth="640"/>
+                    <HBox spacing="10">
+                        <Button text="Rafraîchir le profil" onAction="#onRefreshProfile"/>
+                        <Button text="Déconnexion (oublier le jeton)" onAction="#onLogout"/>
+                    </HBox>
+                    <Label fx:id="profileHint" text="Connectez-vous dans l'onglet Connexion pour obtenir un jeton."
+                           wrapText="true" maxWidth="600"/>
+                </VBox>
+            </Tab>
+        </TabPane>
+    </center>
+</BorderPane>

@@ -1,67 +1,75 @@
-# TP1 — API d’authentification (volontairement dangereuse)
+# API d’authentification — TP2 (Spring Boot)
 
-Back-end Spring Boot : inscription, connexion avec **jeton stocké en base** (colonne `token` sur `users` — variante prévue au TP1 à la place d’une session HTTP), route protégée `GET /api/me`.
+Back-end : **BCrypt**, **politique de mot de passe stricte**, **double confirmation** à l’inscription, **verrouillage** après échecs répétés, **jeton** en base ; `GET /api/me` protégé.
 
-> **Important :** ne commitez pas de mots de passe réels sur un dépôt public. Préférez des variables d’environnement ou un `application-local.properties` ignoré par Git.
+> Ne commitez pas de secrets sur un dépôt public. Préférez variables d’environnement ou `application-local.properties` ignoré par Git.
 
-## Base MySQL (Workbench / port 3307)
+## MySQL
 
-1. Créer la base et la table (script fourni : `src/main/resources/schema-mysql.sql`).
-2. Vérifier dans `application.properties` :
-   - `spring.datasource.url` → port **3307**, base **`authentification`** (voir votre `application.properties`)
-   - `spring.datasource.username` / `spring.datasource.password` (utilisateur MySQL, souvent `root` en local)
+1. Script neuf : `src/main/resources/schema-mysql.sql` (colonnes `password_hash`, `failed_login_attempts`, `lock_until`).
+2. Depuis un ancien schéma TP1 : voir `schema-mysql-migration-tp1-to-tp2.sql` (souvent plus simple de recréer la base en dev).
+3. `application.properties` : URL (ex. port **3307**), utilisateur, mot de passe.
 
-Avec `spring.jpa.hibernate.ddl-auto=update`, Hibernate peut créer/mettre à jour la table si la base existe déjà.
+## Compte de démo
 
-## Compte de test obligatoire (TP)
+Créé au démarrage si absent :
 
-Créé au démarrage s’il n’existe pas :
+| Champ | Valeur |
+|-------|--------|
+| Email | `toto@example.com` |
+| Mot de passe | **`Pwd1234!abcd`** (conforme TP2 : 12+ car., maj, min, chiffre, spécial) |
 
-- **Email :** `toto@example.com`
-- **Mot de passe :** `pwd1234`
+*(En TP1 l’énoncé utilisait `pwd1234` en clair ; le TP2 impose une politique forte pour ce compte aussi.)*
 
-## Lancer l’API
+## Configuration TP2 (`application.properties`)
 
-```bash
-mvn spring-boot:run
+- `app.auth.lock-duration` — durée du blocage après trop d’échecs (défaut `2m`).
+- `app.auth.max-failed-attempts` — nombre d’échecs avant blocage (défaut `5`).
+
+## Endpoints
+
+| Méthode | Chemin | Remarques |
+|---------|--------|-----------|
+| POST | `/api/auth/register` | JSON `email`, `password`, `passwordConfirm` (identiques) |
+| POST | `/api/auth/login` | JSON `email`, `password` → réponse avec `token` |
+| GET | `/api/me` | `Authorization: Bearer <token>` ou `X-Auth-Token` |
+
+Erreurs JSON : `timestamp`, `status`, `error`, `message`, `path`.
+
+- **400** — validation / politique mot de passe / confirmation différente  
+- **401** — identifiants incorrects (**même message** pour email inconnu ou mauvais mot de passe)  
+- **423** — compte **verrouillé** après échecs (WebDAV *Locked* ; on pourrait aussi justifier **429**)  
+- **409** — email déjà utilisé  
+
+## Postman (exemple register)
+
+```json
+{
+  "email": "moi@example.com",
+  "password": "Aa1!monMotDupasse",
+  "passwordConfirm": "Aa1!monMotDupasse"
+}
 ```
 
-API par défaut : `http://localhost:8080`
+Login toto : mot de passe `Pwd1234!abcd`, puis `GET /api/me` avec le `Bearer` reçu.
 
-## Tester avec Postman
+## Qualité (TP2)
 
-1. **POST** `http://localhost:8080/api/auth/register`  
-   Corps JSON : `{ "email": "vous@example.com", "password": "1234" }`  
-   (mot de passe **≥ 4** caractères, règles volontairement faibles — TP1.)  
-   Réponse : `id`, `email`, `createdAt` (pas de `token` tant que vous n’êtes pas connecté).
-2. **POST** `http://localhost:8080/api/auth/login`  
-   Corps : `{ "email": "toto@example.com", "password": "pwd1234" }`  
-   Réponse JSON : `id`, `email`, `createdAt`, **`token`** (UUID enregistré en base).
-3. **GET** `http://localhost:8080/api/me`  
-   Ajouter l’en-tête **`Authorization`** : `Bearer <token>`  
-   (alternative : en-tête **`X-Auth-Token`** avec la valeur du jeton seul).  
-   Réponse : `id`, `email`, `createdAt` (le `token` n’est pas renvoyé sur cette route).
-
-Réponses d’erreur JSON : `timestamp`, `status`, `error`, `message`, `path` (HTTP **400** / **401** / **409** selon le cas).
+- **Tests** : `mvn test` (profil `test`, H2).  
+- **Couverture (JaCoCo)** : `mvn verify` → rapport `target/site/jacoco/index.html` (objectif réaliste ≥ 60 %).  
+- **SonarCloud** : connecter le dépôt, corriger bugs / vulnérabilités majeurs, viser le Quality Gate (voir énoncé TP2).
 
 ## Journal
 
-Fichier : `logs/authentification.log` (connexion / inscription réussie ou échouée — **jamais** de mot de passe dans les logs).
+`logs/authentification.log` — **jamais** de mot de passe ni de jeton dans les logs.
 
-## Tests
+## Analyse de sécurité (évolution)
 
-```bash
-mvn test
-```
+TP2 corrige le stockage (**hash** + politique + **lockout**), mais le jeton reste réutilisable s’il est volé, il n’y a pas encore le protocole anti-rejeu du **TP3**. Rédigez les 5+ risques restants pour le compte rendu.
 
-Les tests utilisent le profil `test` (H2 en mémoire, voir `application-test.properties`).
+Guide détaillé : `../Doc/Guide/GUIDE_TP2.md`.
 
-## Analyse de sécurité TP1 (aperçu)
+## Client JavaFX (`../authentification_front`)
 
-1. **Mots de passe en clair** en base : fuite DB = compromission totale des comptes.  
-2. **Pas de hachage** : aucune protection si les données sont copiées.  
-3. **Jeton en base sans expiration** : fuite ou interception du jeton (réseau, logs, XSS) = accès au compte tant que le jeton n’est pas révoqué.  
-4. **Politique de mot de passe minimale (4 caractères)** : bruteforce et devinettes faciles.  
-5. **Pas de rate limiting** : tentatives de connexion illimitées (corrigé en TP2).
-
-Cette implémentation est **pédagogique** et **inacceptable en production**.
+Interface de bureau (connexion, inscription avec indicateur de force rouge/orange/vert, profil).  
+Démarrer le **backend** avant le client ; URL par défaut `http://localhost:8080`. Voir le `README.md` du module front.

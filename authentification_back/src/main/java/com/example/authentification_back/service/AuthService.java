@@ -1,53 +1,67 @@
 package com.example.authentification_back.service;
 
+import com.example.authentification_back.config.AuthSecurityProperties;
 import com.example.authentification_back.dto.LoginRequest;
 import com.example.authentification_back.dto.RegisterRequest;
 import com.example.authentification_back.dto.UserResponse;
 import com.example.authentification_back.entity.User;
+import com.example.authentification_back.exception.AccountLockedException;
 import com.example.authentification_back.exception.AuthenticationFailedException;
 import com.example.authentification_back.exception.InvalidInputException;
 import com.example.authentification_back.exception.ResourceConflictException;
 import com.example.authentification_back.repository.UserRepository;
+import com.example.authentification_back.validation.PasswordPolicyValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Service principal d'authentification pour le TP1.
+ * Service d'authentification TP2 : BCrypt, politique de mot de passe, verrouillage après échecs répétés.
  * <p>
- * Cette implémentation est volontairement dangereuse et ne doit jamais être utilisée en production
- * (mots de passe en clair, jeton persistant en base sans expiration — TP1).
- *
- * @see com.example.authentification_back.entity.User
+ * TP2 améliore le stockage mais ne protège pas encore contre le rejeu des requêtes capturées (TP3).
  */
 @Service
 public class AuthService {
 
+	/** Message unique pour email inconnu ou mot de passe incorrect (recommandation sécurité TP2). */
+	public static final String GENERIC_LOGIN_ERROR = "Identifiants invalides";
+
 	private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
 	private final UserRepository userRepository;
+	private final PasswordEncoder passwordEncoder;
+	private final PasswordPolicyValidator passwordPolicyValidator;
+	private final AuthSecurityProperties authProperties;
+	private final Clock clock;
 
-	public AuthService(UserRepository userRepository) {
+	public AuthService(
+			UserRepository userRepository,
+			PasswordEncoder passwordEncoder,
+			PasswordPolicyValidator passwordPolicyValidator,
+			AuthSecurityProperties authProperties,
+			Clock clock) {
 		this.userRepository = userRepository;
+		this.passwordEncoder = passwordEncoder;
+		this.passwordPolicyValidator = passwordPolicyValidator;
+		this.authProperties = authProperties;
+		this.clock = clock;
 	}
 
-	/**
-	 * Crée un compte si l'email est libre et si le mot de passe respecte la règle minimale (4 caractères).
-	 *
-	 * @throws InvalidInputException       si le mot de passe est trop court (doublon de contrôle avec la validation HTTP)
-	 * @throws ResourceConflictException si l'email existe déjà (HTTP 409)
-	 */
 	@Transactional
 	public UserResponse register(RegisterRequest request) {
 		String email = normalizeEmail(request.email());
-		String password = request.password();
-		if (password == null || password.length() < 4) {
-			log.warn("Inscription échouée: mot de passe trop court pour {}", email);
-			throw new InvalidInputException("Le mot de passe doit contenir au moins 4 caractères");
+		passwordPolicyValidator.assertCompliant(request.password());
+		if (!request.password().equals(request.passwordConfirm())) {
+			log.warn("Inscription échouée: confirmation différente pour {}", email);
+			throw new InvalidInputException("Les mots de passe ne correspondent pas");
 		}
 		if (userRepository.existsByEmail(email)) {
 			log.warn("Inscription échouée: email déjà utilisé ({})", email);
@@ -55,43 +69,57 @@ public class AuthService {
 		}
 		User user = new User();
 		user.setEmail(email);
-		user.setPasswordClear(password);
+		user.setPasswordHash(passwordEncoder.encode(request.password()));
 		userRepository.save(user);
 		log.info("Inscription réussie pour l'utilisateur id={} email={}", user.getId(), email);
 		return UserResponse.profile(user);
 	}
 
-	/**
-	 * Authentifie l'utilisateur, remplace le jeton stocké par un nouvel UUID (une seule session « logique » par compte).
-	 *
-	 * @throws AuthenticationFailedException email inconnu ou mot de passe incorrect (HTTP 401)
-	 */
 	@Transactional
 	public UserResponse login(LoginRequest request) {
 		String email = normalizeEmail(request.email());
-		User user = userRepository.findByEmail(email)
-				.orElseThrow(() -> {
-					log.warn("Connexion échouée: email inconnu ({})", email);
-					return new AuthenticationFailedException("Email inconnu");
-				});
-		if (!user.getPasswordClear().equals(request.password())) {
-			log.warn("Connexion échouée: mot de passe incorrect pour {}", email);
-			throw new AuthenticationFailedException("Mot de passe incorrect");
+		String rawPassword = request.password();
+		Instant now = clock.instant();
+
+		Optional<User> optUser = userRepository.findByEmail(email);
+		if (optUser.isEmpty()) {
+			log.warn("Connexion échouée: identifiants invalides (email non reconnu)");
+			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
 		}
-		// Jeton opaque stocké en base ; ne jamais écrire le mot de passe dans les logs.
-		String newToken = UUID.randomUUID().toString();
-		user.setToken(newToken);
+		User user = optUser.get();
+
+		if (user.getLockUntil() != null && user.getLockUntil().isAfter(now)) {
+			log.warn("Connexion refusée: compte verrouillé id={}", user.getId());
+			throw new AccountLockedException("Compte temporairement verrouillé. Réessayez plus tard.");
+		}
+		// Blocage expiré : on réinitialise compteur et date (persisté pour cohérence avec la base).
+		if (user.getLockUntil() != null) {
+			user.setLockUntil(null);
+			user.setFailedLoginAttempts(0);
+			userRepository.save(user);
+		}
+
+		if (passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+			user.setFailedLoginAttempts(0);
+			user.setLockUntil(null);
+			String newToken = UUID.randomUUID().toString();
+			user.setToken(newToken);
+			userRepository.save(user);
+			log.info("Connexion réussie pour l'utilisateur id={} email={}", user.getId(), email);
+			return UserResponse.login(user, newToken);
+		}
+
+		int failures = user.getFailedLoginAttempts() + 1;
+		user.setFailedLoginAttempts(failures);
+		if (failures >= authProperties.getMaxFailedAttempts()) {
+			user.setLockUntil(now.plus(authProperties.getLockDuration()));
+			log.warn("Compte verrouillé après {} échecs id={} email={}", failures, user.getId(), email);
+		}
 		userRepository.save(user);
-		log.info("Connexion réussie pour l'utilisateur id={} email={}", user.getId(), email);
-		return UserResponse.login(user, newToken);
+		log.warn("Connexion échouée: identifiants invalides (tentative {}/{})", failures, authProperties.getMaxFailedAttempts());
+		throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
 	}
 
-	/**
-	 * Résout l'utilisateur à partir du jeton présent en base.
-	 *
-	 * @param rawToken valeur extraite des en-têtes HTTP (jamais journalisée)
-	 * @throws AuthenticationFailedException jeton absent, vide ou inconnu
-	 */
 	@Transactional(readOnly = true)
 	public UserResponse currentUser(String rawToken) {
 		if (rawToken == null || rawToken.isBlank()) {
@@ -103,7 +131,6 @@ public class AuthService {
 				.orElseThrow(() -> new AuthenticationFailedException("Token invalide"));
 	}
 
-	/** Normalisation pour éviter les doublons de casse / espaces sur l'email. */
 	private static String normalizeEmail(String email) {
 		if (email == null) {
 			return "";

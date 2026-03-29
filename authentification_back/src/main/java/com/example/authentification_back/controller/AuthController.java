@@ -16,9 +16,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Contrôleur REST du TP1 : exposition des routes sous le préfixe {@code /api}.
+ * Contrôleur REST (TP2) : inscription avec confirmation, login BCrypt + jeton, profil protégé.
  * <p>
- * Cette implémentation est volontairement dangereuse et ne doit jamais être utilisée en production.
+ * Reste fragile au rejeu réseau (TP3). N'incluez pas ceci tel quel en production.
  *
  * @see AuthService
  */

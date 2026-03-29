@@ -1,15 +1,19 @@
 package com.example.authentification_back;
 
+import com.example.authentification_back.config.TestAccountInitializer;
+import com.example.authentification_back.service.AuthService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -18,13 +22,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Tests d'intégration HTTP (MockMvc) pour le TP1 : profil {@code test} + H2 (voir {@code application-test.properties}).
- * Le compte {@code toto@example.com} est créé par {@link com.example.authentification_back.config.TestAccountInitializer}.
+ * Tests d'intégration TP2 (MockMvc, H2, profil {@code test}). Les mutations sont annulées en fin de test
+ * grâce à {@link Transactional} (les données du {@link TestAccountInitializer} restent car commises au démarrage).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Transactional
 class AuthApiIntegrationTest {
+
+	private static final String STRONG = "Aa1!aaaaaaaa";
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -32,34 +39,49 @@ class AuthApiIntegrationTest {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	private static String registerJson(String email, String pass, String confirm) {
+		return String.format(
+				"{\"email\":\"%s\",\"password\":\"%s\",\"passwordConfirm\":\"%s\"}",
+				email, pass, confirm);
+	}
+
 	@Test
 	void register_rejects_invalid_email_format() throws Exception {
 		mockMvc.perform(post("/api/auth/register")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"email\":\"pas-un-email\",\"password\":\"1234\"}"))
+						.content(registerJson("pas-un-email", STRONG, STRONG)))
 				.andExpect(status().isBadRequest());
 	}
 
 	@Test
-	void register_rejects_password_shorter_than_four() throws Exception {
+	void register_rejects_weak_password() throws Exception {
 		mockMvc.perform(post("/api/auth/register")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"email\":\"user@example.com\",\"password\":\"abc\"}"))
+						.content(registerJson("user@example.com", "short", "short")))
 				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void register_rejects_password_confirm() throws Exception {
+		mockMvc.perform(post("/api/auth/register")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(registerJson("confirm@example.com", STRONG, "Bb2!bbbbbbbb")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Les mots de passe ne correspondent pas"));
 	}
 
 	@Test
 	void register_ok() throws Exception {
 		mockMvc.perform(post("/api/auth/register")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"email\":\"newuser@example.com\",\"password\":\"1234\"}"))
+						.content(registerJson("newuser@example.com", STRONG, STRONG)))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.email").value("newuser@example.com"));
 	}
 
 	@Test
 	void register_conflict_when_email_exists() throws Exception {
-		String body = "{\"email\":\"dup@example.com\",\"password\":\"1234\"}";
+		String body = registerJson("dup@example.com", STRONG, STRONG);
 		mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
 				.andExpect(status().isCreated());
 		mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -70,27 +92,36 @@ class AuthApiIntegrationTest {
 	void login_ok_with_test_account() throws Exception {
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"email\":\"toto@example.com\",\"password\":\"pwd1234\"}"))
+						.content(String.format(
+								"{\"email\":\"%s\",\"password\":\"%s\"}",
+								TestAccountInitializer.TEST_EMAIL,
+								TestAccountInitializer.TEST_PASSWORD_PLAIN)))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.email").value("toto@example.com"))
+				.andExpect(jsonPath("$.email").value(TestAccountInitializer.TEST_EMAIL))
 				.andExpect(jsonPath("$.token").exists());
 	}
 
 	@Test
-	void login_fails_when_password_wrong() throws Exception {
+	void login_fails_with_same_generic_message_for_wrong_password() throws Exception {
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"email\":\"toto@example.com\",\"password\":\"wrong\"}"))
-				.andExpect(status().isUnauthorized());
+						.content(String.format(
+								"{\"email\":\"%s\",\"password\":\"wrong\"}",
+								TestAccountInitializer.TEST_EMAIL)))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
 	}
 
 	@Test
-	void login_fails_when_email_unknown() throws Exception {
+	void login_fails_with_same_generic_message_for_unknown_email() throws Exception {
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"email\":\"nobody@example.com\",\"password\":\"pwd1234\"}"))
+						.content(String.format(
+								"{\"email\":\"%s\",\"password\":\"%s\"}",
+								"nobody@example.com",
+								TestAccountInitializer.TEST_PASSWORD_PLAIN)))
 				.andExpect(status().isUnauthorized())
-				.andExpect(jsonPath("$.message").value("Email inconnu"));
+				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
 	}
 
 	@Test
@@ -103,14 +134,42 @@ class AuthApiIntegrationTest {
 	void me_ok_after_login_with_bearer_token() throws Exception {
 		MvcResult login = mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"email\":\"toto@example.com\",\"password\":\"pwd1234\"}"))
+						.content(String.format(
+								"{\"email\":\"%s\",\"password\":\"%s\"}",
+								TestAccountInitializer.TEST_EMAIL,
+								TestAccountInitializer.TEST_PASSWORD_PLAIN)))
 				.andExpect(status().isOk())
 				.andReturn();
 		String token = objectMapper.readTree(login.getResponse().getContentAsString()).get("token").asText();
 		MvcResult me = mockMvc.perform(get("/api/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.email").value("toto@example.com"))
+				.andExpect(jsonPath("$.email").value(TestAccountInitializer.TEST_EMAIL))
 				.andReturn();
 		assertThat(objectMapper.readTree(me.getResponse().getContentAsString()).has("token")).isFalse();
+	}
+
+	@Test
+	void account_locks_after_five_failures_then_unlocks_after_delay() throws Exception {
+		String email = "lockout@example.com";
+		String strong = "Bb2!bbbbbbbb";
+		mockMvc.perform(post("/api/auth/register")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(registerJson(email, strong, strong)))
+				.andExpect(status().isCreated());
+		for (int i = 0; i < 5; i++) {
+			mockMvc.perform(post("/api/auth/login")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(String.format("{\"email\":\"%s\",\"password\":\"nope\"}", email)))
+					.andExpect(status().isUnauthorized());
+		}
+		mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(String.format("{\"email\":\"%s\",\"password\":\"nope\"}", email)))
+				.andExpect(status().is(HttpStatus.LOCKED.value()));
+		Thread.sleep(200);
+		mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(String.format("{\"email\":\"%s\",\"password\":\"%s\"}", email, strong)))
+				.andExpect(status().isOk());
 	}
 }
