@@ -1,5 +1,6 @@
 package com.example.authentification_back.config;
 
+import com.example.authentification_back.security.Tp3Proof;
 import com.example.authentification_back.entity.User;
 import com.example.authentification_back.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
@@ -31,9 +32,13 @@ public class TestAccountInitializer implements CommandLineRunner {
 		if (userRepository.existsByEmail(TEST_EMAIL)) {
 			return;
 		}
+		String authSalt = Tp3Proof.randomAuthSaltHex();
+		String fp = Tp3Proof.identityFingerprintHex(TEST_EMAIL, TEST_PASSWORD_PLAIN, authSalt);
 		User user = new User();
 		user.setEmail(TEST_EMAIL);
 		user.setPasswordHash(passwordEncoder.encode(TEST_PASSWORD_PLAIN));
+		user.setAuthSalt(authSalt);
+		user.setIdentityFingerprint(fp);
 		userRepository.save(user);
 	}
 }

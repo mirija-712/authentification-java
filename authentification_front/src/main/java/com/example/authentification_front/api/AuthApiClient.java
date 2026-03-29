@@ -1,5 +1,6 @@
 package com.example.authentification_front.api;
 
+import com.example.authentification_front.security.Tp3Proof;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 
@@ -43,6 +44,27 @@ public final class AuthApiClient {
 		String json = String.format("{\"email\":%s,\"password\":%s}",
 				gson.toJson(email), gson.toJson(password));
 		return postJson("/api/auth/login", json, UserDto.class, 200);
+	}
+
+	/**
+	 * TP3 : challenge puis login avec preuve HMAC (le mot de passe ne transite pas sur le POST /login).
+	 */
+	public ApiResult<UserDto> loginWithTp3(String email, String password) {
+		ApiResult<ChallengeDto> ch = challenge(email);
+		if (ch instanceof ApiResult.Err<?> err) {
+			return new ApiResult.Err<>(err.message(), err.httpStatus());
+		}
+		ChallengeDto c = ((ApiResult.Ok<ChallengeDto>) ch).value();
+		String fp = Tp3Proof.identityFingerprintHex(email, password, c.authSalt);
+		String proof = Tp3Proof.proofHex(fp, c.nonce);
+		String json = String.format("{\"email\":%s,\"nonce\":%s,\"proof\":%s}",
+				gson.toJson(email), gson.toJson(c.nonce), gson.toJson(proof));
+		return postJson("/api/auth/login", json, UserDto.class, 200);
+	}
+
+	public ApiResult<ChallengeDto> challenge(String email) {
+		String json = String.format("{\"email\":%s}", gson.toJson(email));
+		return postJson("/api/auth/challenge", json, ChallengeDto.class, 200);
 	}
 
 	public ApiResult<UserDto> me(String bearerToken) {
@@ -101,6 +123,13 @@ public final class AuthApiClient {
 			// ignore
 		}
 		return json.length() > 200 ? json.substring(0, 200) + "…" : json;
+	}
+
+	/** Réponse {@code POST /api/auth/challenge}. */
+	public static class ChallengeDto {
+		public String nonce;
+		public String expiresAt;
+		public String authSalt;
 	}
 
 	/** DTO aligné sur le JSON du backend (champs publics pour Gson). */

@@ -7,7 +7,7 @@ import java.time.Duration;
 /**
  * Paramètres anti brute-force (TP2) : durée de blocage et nombre d'échecs avant verrouillage.
  * <p>
- * TP2 améliore le stockage mais ne protège pas encore contre le rejeu des messages réseau (TP3).
+ * TP2 (lockout) + TP3 (durée de validité du nonce challenge).
  */
 @ConfigurationProperties(prefix = "app.auth")
 public class AuthSecurityProperties {
@@ -17,6 +17,9 @@ public class AuthSecurityProperties {
 
 	/** Nombre maximum de mots de passe incorrects avant blocage (défaut : 5, énoncé TP2). */
 	private int maxFailedAttempts = 5;
+
+	/** Durée de validité d’un nonce TP3 après {@code POST /api/auth/challenge}. */
+	private Duration challengeTtl = Duration.ofMinutes(5);
 
 	public Duration getLockDuration() {
 		return lockDuration;
@@ -32,5 +35,13 @@ public class AuthSecurityProperties {
 
 	public void setMaxFailedAttempts(int maxFailedAttempts) {
 		this.maxFailedAttempts = maxFailedAttempts;
+	}
+
+	public Duration getChallengeTtl() {
+		return challengeTtl;
+	}
+
+	public void setChallengeTtl(Duration challengeTtl) {
+		this.challengeTtl = challengeTtl;
 	}
 }

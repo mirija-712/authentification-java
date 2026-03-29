@@ -13,7 +13,7 @@ import java.time.Instant;
 /**
  * Entité utilisateur (TP2) : mot de passe haché avec BCrypt, compteur d'échecs et verrouillage temporaire.
  * <p>
- * TP2 améliore le stockage mais ne protège pas encore contre le rejeu (TP3). Le jeton reste une solution TP1/2 pragmatique.
+ * TP2 : BCrypt + lockout. TP3 : sel {@code authSalt} + empreinte {@code identityFingerprint} pour login sans mot de passe en clair.
  */
 @Entity
 @Table(name = "users")
@@ -43,6 +43,16 @@ public class User {
 	/** Fin de période de blocage ; null si le compte n'est pas verrouillé. */
 	@Column(name = "lock_until")
 	private Instant lockUntil;
+
+	/** Sel public par utilisateur (TP3) — nécessaire au client pour recalculer l’empreinte. */
+	@Column(name = "auth_salt", length = 64)
+	private String authSalt;
+
+	/**
+	 * Empreinte SHA-256 hex (email|password|sel) — permet de vérifier {@code HMAC(empreinte, nonce)} sans recevoir le mot de passe.
+	 */
+	@Column(name = "identity_fingerprint", length = 64)
+	private String identityFingerprint;
 
 	@PrePersist
 	void prePersist() {
@@ -105,5 +115,21 @@ public class User {
 
 	public void setLockUntil(Instant lockUntil) {
 		this.lockUntil = lockUntil;
+	}
+
+	public String getAuthSalt() {
+		return authSalt;
+	}
+
+	public void setAuthSalt(String authSalt) {
+		this.authSalt = authSalt;
+	}
+
+	public String getIdentityFingerprint() {
+		return identityFingerprint;
+	}
+
+	public void setIdentityFingerprint(String identityFingerprint) {
+		this.identityFingerprint = identityFingerprint;
 	}
 }

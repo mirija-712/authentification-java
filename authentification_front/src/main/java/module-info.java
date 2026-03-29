@@ -8,4 +8,5 @@ module com.example.authentification_front {
 	exports com.example.authentification_front;
 	exports com.example.authentification_front.api;
 	exports com.example.authentification_front.policy;
+	exports com.example.authentification_front.security;
 }

@@ -15,7 +15,18 @@ CREATE TABLE IF NOT EXISTS users (
   token VARCHAR(64) DEFAULT NULL,
   failed_login_attempts INT NOT NULL DEFAULT 0,
   lock_until TIMESTAMP(6) DEFAULT NULL,
+  auth_salt VARCHAR(64) DEFAULT NULL,
+  identity_fingerprint VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_users_email (email),
   UNIQUE KEY uk_users_token (token)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS login_nonces (
+  nonce VARCHAR(64) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMP(6) NOT NULL,
+  consumed BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY (nonce),
+  KEY idx_login_nonces_email (email)
 ) ENGINE=InnoDB;

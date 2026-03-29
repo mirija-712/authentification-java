@@ -1,6 +1,7 @@
 package com.example.authentification_back;
 
 import com.example.authentification_back.config.TestAccountInitializer;
+import com.example.authentification_back.security.Tp3Proof;
 import com.example.authentification_back.service.AuthService;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Tests d'intégration TP2 (MockMvc, H2, profil {@code test}). Pas de {@code @Transactional} sur la classe :
+ * Tests d'intégration TP2/TP3 (MockMvc, H2, profil {@code test}). Pas de {@code @Transactional} sur la classe :
  * avec MockMvc, une transaction de test enveloppante ferait annuler les échecs de login (compteur / verrou)
  * avant la requête suivante.
  */
@@ -84,6 +85,35 @@ class AuthApiIntegrationTest {
 				.andExpect(status().isCreated());
 		mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
 				.andExpect(status().isConflict());
+	}
+
+	@Test
+	void challenge_unknown_email_returns_401() throws Exception {
+		mockMvc.perform(post("/api/auth/challenge")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"email\":\"inexistant@example.com\"}"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void login_tp3_ok_with_test_account() throws Exception {
+		MvcResult ch = mockMvc.perform(post("/api/auth/challenge")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(String.format("{\"email\":\"%s\"}", TestAccountInitializer.TEST_EMAIL)))
+				.andExpect(status().isOk())
+				.andReturn();
+		String nonce = JsonPath.read(ch.getResponse().getContentAsString(), "$.nonce");
+		String authSalt = JsonPath.read(ch.getResponse().getContentAsString(), "$.authSalt");
+		String fp = Tp3Proof.identityFingerprintHex(
+				TestAccountInitializer.TEST_EMAIL, TestAccountInitializer.TEST_PASSWORD_PLAIN, authSalt);
+		String proof = Tp3Proof.proofHex(fp, nonce);
+		mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(String.format(
+								"{\"email\":\"%s\",\"nonce\":\"%s\",\"proof\":\"%s\"}",
+								TestAccountInitializer.TEST_EMAIL, nonce, proof)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.token").exists());
 	}
 
 	@Test
@@ -165,7 +195,7 @@ class AuthApiIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(String.format("{\"email\":\"%s\",\"password\":\"nope\"}", email)))
 				.andExpect(status().is(HttpStatus.LOCKED.value()));
-		Thread.sleep(200);
+		Thread.sleep(3100);
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(String.format("{\"email\":\"%s\",\"password\":\"%s\"}", email, strong)))

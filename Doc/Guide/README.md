@@ -6,6 +6,7 @@ Ce dossier contient des **guides pédagogiques en français** pour recoder et co
 |---------|---------|
 | **[GUIDE_TP1.md](./GUIDE_TP1.md)** | Concepts du TP1 (API REST, couches Spring, session vs jeton, modèle **mot de passe en clair**, exceptions HTTP, flux). Extraits « état TP1 » à titre historique. |
 | **[GUIDE_TP2.md](./GUIDE_TP2.md)** | Guide technique principal : backend TP2, **couplage avec le client JavaFX**, CORS, code commenté + annexe sources. |
+| **[GUIDE_TP3.md](./GUIDE_TP3.md)** | TP3 : **challenge / nonce**, preuve **HMAC**, login sans mot de passe sur le POST `/login`. |
 
 | Module | README |
 |--------|--------|

@@ -1,5 +1,7 @@
 package com.example.authentification_back.controller;
 
+import com.example.authentification_back.dto.ChallengeRequest;
+import com.example.authentification_back.dto.ChallengeResponse;
 import com.example.authentification_back.dto.LoginRequest;
 import com.example.authentification_back.dto.RegisterRequest;
 import com.example.authentification_back.dto.UserResponse;
@@ -16,9 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Contrôleur REST (TP2) : inscription avec confirmation, login BCrypt + jeton, profil protégé.
- * <p>
- * Reste fragile au rejeu réseau (TP3). N'incluez pas ceci tel quel en production.
+ * Contrôleur REST : inscription, login TP2 (mot de passe) ou TP3 (nonce + preuve HMAC), challenge TP3, profil.
  *
  * @see AuthService
  */
@@ -44,7 +44,15 @@ public class AuthController {
 	}
 
 	/**
-	 * Vérifie les identifiants et persiste un nouveau jeton en base pour l'utilisateur.
+	 * Challenge TP3 : retourne un nonce à usage unique et le sel public pour calculer la preuve côté client.
+	 */
+	@PostMapping("/auth/challenge")
+	public ResponseEntity<ChallengeResponse> challenge(@Valid @RequestBody ChallengeRequest request) {
+		return ResponseEntity.ok(authService.createChallenge(request));
+	}
+
+	/**
+	 * Connexion : soit {@code password} (TP2), soit {@code nonce} + {@code proof} sans mot de passe (TP3).
 	 *
 	 * @return 200 avec le profil et le champ {@code token} à réutiliser pour {@link #me}.
 	 */
