@@ -7,8 +7,9 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 
 /**
- * Protocole SSO TP3 (slides) : {@code message = email + ":" + nonce + ":" + timestamp},
+ * Même logique que le backend TP3 : {@code message = email + ":" + nonce + ":" + timestamp},
  * {@code hmac = HMAC_SHA256(key = mot de passe UTF-8, data = message UTF-8)}, hex.
+ * Le mot de passe sert uniquement en local ; le serveur le retrouve après déchiffrement du champ stocké (TP4).
  */
 public final class SsoHmac {
 

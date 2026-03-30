@@ -28,7 +28,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Authentification TP3 (SSO 2 étapes logiques, 1 échange réseau) : HMAC + nonce + timestamp, SMK pour le mot de passe.
+ * Authentification : <b>TP3</b> (HMAC + nonce + timestamp sur le réseau) + <b>TP4</b> (mot de passe stocké chiffré avec {@code APP_MASTER_KEY}).
+ * <p>
+ * Inscription : chiffrement <i>avant</i> {@code save}. Connexion : déchiffrement en mémoire uniquement pour vérifier le HMAC (le mot de passe ne transite pas sur POST /login).
  */
 @Service
 public class AuthService {
@@ -73,6 +75,7 @@ public class AuthService {
 		}
 		User user = new User();
 		user.setEmail(email);
+		// TP4 : persistance uniquement du secret chiffré (AES-GCM), jamais du mot de passe en clair en base.
 		user.setPasswordEncrypted(passwordEncryptionService.encrypt(request.password()));
 		userRepository.save(user);
 		log.info("Inscription réussie pour l'utilisateur id={} email={}", user.getId(), email);
@@ -109,6 +112,7 @@ public class AuthService {
 			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
 		}
 
+		// Mot de passe en clair uniquement en RAM pour cette requête ; ne jamais logger cette valeur.
 		String plainPassword;
 		try {
 			plainPassword = passwordEncryptionService.decrypt(user.getPasswordEncrypted());
@@ -117,6 +121,7 @@ public class AuthService {
 			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
 		}
 
+		// TP3 : même message et même clé HMAC que le client (mot de passe UTF-8).
 		String message = SsoHmac.messageToSign(email, request.nonce(), request.timestamp());
 		String expectedHex = SsoHmac.hmacSha256Hex(plainPassword, message);
 		if (!SsoHmac.constantTimeEqualsHex(expectedHex, request.hmac())) {

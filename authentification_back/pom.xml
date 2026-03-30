@@ -163,6 +163,20 @@
 					</excludes>
 				</configuration>
 			</plugin>
+			<!--
+			  TP4 : injecte APP_MASTER_KEY dans le processus Surefire (fork JVM des tests).
+			  Garantit que les @SpringBootTest passent même sans variable définie sur la machine de l'étudiant.
+			  Valeur factice uniquement — alignée sur l'énoncé et sur GitHub Actions.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<environmentVariables>
+						<APP_MASTER_KEY>test_master_key_for_ci_only</APP_MASTER_KEY>
+					</environmentVariables>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 

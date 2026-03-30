@@ -1,4 +1,4 @@
--- TP3 — schéma MySQL (énoncé : users.password_encrypted, auth_nonce)
+-- TP3/TP4 — schéma MySQL (users.password_encrypted = texte chiffré AES-GCM, format conseillé v1:Base64(iv):Base64(ciphertext), table auth_nonce)
 
 CREATE DATABASE IF NOT EXISTS authentification
   CHARACTER SET utf8mb4

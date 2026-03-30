@@ -46,13 +46,15 @@ public final class AuthApiClient {
 	/**
 	 * TP3 : {@code POST /api/auth/login} avec {@code email}, {@code nonce}, {@code timestamp} (epoch s), {@code hmac} (hex).
 	 * Message signé : {@code email:nonce:timestamp} ; clé HMAC = mot de passe (UTF-8). Le mot de passe ne transite pas.
+	 * (Côté serveur TP4, le mot de passe stocké est chiffré en base ; le serveur le déchiffre pour recalculer le même HMAC.)
 	 */
 	public ApiResult<UserDto> login(String email, String password) {
+		// Paramètres « à la volée » : pas d’appel challenge séparé ; un seul POST /login.
 		String nonce = UUID.randomUUID().toString();
 		long ts = Instant.now().getEpochSecond();
-		String em = email.trim().toLowerCase(Locale.ROOT);
+		String em = email.trim().toLowerCase(Locale.ROOT); // même normalisation que le backend
 		String msg = SsoHmac.messageToSign(em, nonce, ts);
-		String hmac = SsoHmac.hmacSha256Hex(password, msg);
+		String hmac = SsoHmac.hmacSha256Hex(password, msg); // le mot de passe reste sur cette machine
 		String json = String.format(Locale.ROOT,
 				"{\"email\":%s,\"nonce\":%s,\"timestamp\":%d,\"hmac\":%s}",
 				gson.toJson(em), gson.toJson(nonce), ts, gson.toJson(hmac));

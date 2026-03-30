@@ -1,0 +1,45 @@
+# =============================================================================
+# TP4 — Intégration continue (cœur de l’énoncé)
+# =============================================================================
+# Déclencheurs : chaque push et chaque PR vers la branche main.
+# Étapes implicites : checkout → JDK → mvn verify (compile + tests) → SonarCloud.
+# Échec si : au moins un test JUnit échoue, ou si la Quality Gate Sonar est rouge
+# (selon la configuration du projet sur sonarcloud.io).
+#
+# Secrets GitHub à créer (Settings → Secrets → Actions) :
+#   SONAR_TOKEN — jeton d’analyse SonarCloud (ne jamais commiter).
+# Organisation / clé projet Maven : voir pom.xml à la racine du dépôt.
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Historique Git complet : utile à Sonar (blame, nouvelles lignes).
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # JavaFX (front) exige Java 21 ; le backend compile toujours en --release 17.
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # APP_MASTER_KEY : clé factice uniquement pour la CI (énoncé TP4).
+      # Les tests backend utilisent H2 (profil test) : pas de MySQL sur le runner.
+      - name: Maven verify + SonarCloud
+        env:
+          APP_MASTER_KEY: test_master_key_for_ci_only
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B verify sonar:sonar -Dsonar.token=${SONAR_TOKEN}

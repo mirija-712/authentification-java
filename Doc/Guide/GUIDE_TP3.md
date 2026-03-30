@@ -20,7 +20,7 @@ Il n’y a **pas** d’endpoint séparé « challenge » : un seul aller-retour 
 
 ## Configuration
 
-- `app.auth.server-master-key` — clé maître pour chiffrer les mots de passe en base (AES-256-GCM).
+- **TP4** : variable d’environnement **`APP_MASTER_KEY`** — clé maître pour chiffrer les mots de passe en base (AES-256-GCM, format `v1:Base64(iv):Base64(ciphertext)`).
 - `app.auth.timestamp-skew-seconds` — tolérance horloge (défaut `60`).
 - `app.auth.nonce-ttl-seconds` — TTL enregistré sur la ligne nonce (défaut `120`).
 
