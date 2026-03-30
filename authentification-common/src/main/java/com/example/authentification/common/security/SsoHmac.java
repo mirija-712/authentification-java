@@ -1,4 +1,4 @@
-package com.example.authentification_back.security;
+package com.example.authentification.common.security;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -7,12 +7,8 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 
 /**
- * Protocole SSO TP3 — client et serveur doivent produire exactement le même tag :
- * {@code message = email + ":" + nonce + ":" + timestamp} (secondes depuis l’epoch),
- * {@code hmac = HMAC_SHA256(key = mot de passe UTF-8, data = message UTF-8)}, envoyé en hexadécimal.
- * <p>
- * Côté serveur (TP4), le mot de passe utilisé comme clé est celui obtenu après {@code decrypt(password_encrypted)} ;
- * il n’est jamais envoyé sur le réseau dans le corps du POST /login.
+ * Protocole TP3 partagé client/serveur : {@code message = email + ":" + nonce + ":" + timestamp} (secondes),
+ * {@code hmac = HMAC_SHA256(key = mot de passe UTF-8, data = message UTF-8)}, hexadécimal.
  */
 public final class SsoHmac {
 

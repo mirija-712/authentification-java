@@ -1,6 +1,6 @@
 package com.example.authentification_front.api;
 
-import com.example.authentification_front.security.SsoHmac;
+import com.example.authentification.common.security.SsoHmac;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 

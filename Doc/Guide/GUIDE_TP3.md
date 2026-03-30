@@ -26,8 +26,8 @@ Il n’y a **pas** d’endpoint séparé « challenge » : un seul aller-retour 
 
 ## Code
 
-- Backend : `com.example.authentification_back.security.SsoHmac`
-- Client JavaFX : `com.example.authentification_front.security.SsoHmac` (même logique)
+- Module partagé (évite la duplication Sonar) : `com.example.authentification.common.security.SsoHmac` dans le module Maven `authentification-common`
+- Utilisé par le backend (`AuthService`) et le client (`AuthApiClient`)
 
 ## Migration MySQL
 

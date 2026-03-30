@@ -32,6 +32,9 @@ public class PasswordEncryptionService {
 	/** Tag d’authentification GCM en bits (128 bits = 16 octets dans le flux chiffré). */
 	private static final int GCM_TAG_LENGTH = 128;
 
+	/** Réutilisé pour les IV (évite d’instancier un nouveau générateur à chaque chiffrement). */
+	private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
 	private final SecretKey aesKey;
 
 	public PasswordEncryptionService(@Value("${APP_MASTER_KEY:}") String appMasterKey) {
@@ -60,7 +63,7 @@ public class PasswordEncryptionService {
 	public String encrypt(String plainPassword) {
 		try {
 			byte[] iv = new byte[GCM_IV_LENGTH];
-			new SecureRandom().nextBytes(iv); // IV aléatoire : interdit d’utiliser un IV fixe (énoncé TP4).
+			SECURE_RANDOM.nextBytes(iv); // IV aléatoire : interdit d’utiliser un IV fixe (énoncé TP4).
 			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
 			cipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
 			byte[] cipherText = cipher.doFinal(plainPassword.getBytes(StandardCharsets.UTF_8));
