@@ -1,4 +1,4 @@
-package com.example.authentification.common.security;
+package com.example.authentification_back.security;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -6,10 +6,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 
-/**
- * Protocole TP3 partagé client/serveur : {@code message = email + ":" + nonce + ":" + timestamp} (secondes),
- * {@code hmac = HMAC_SHA256(key = mot de passe UTF-8, data = message UTF-8)}, hexadécimal.
- */
 public final class SsoHmac {
 
 	private static final String HMAC_SHA256 = "HmacSHA256";
@@ -17,7 +13,6 @@ public final class SsoHmac {
 	private SsoHmac() {
 	}
 
-	/** Email déjà normalisé (trim + lower case), comme côté serveur. */
 	public static String messageToSign(String normalizedEmail, String nonce, long timestampEpochSeconds) {
 		return normalizedEmail + ":" + nonce + ":" + timestampEpochSeconds;
 	}

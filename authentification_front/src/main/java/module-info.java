@@ -1,5 +1,4 @@
 module com.example.authentification_front {
-	requires com.example.authentification.common;
 	requires javafx.controls;
 	requires javafx.fxml;
 	requires java.net.http;

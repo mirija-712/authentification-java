@@ -1,7 +1,7 @@
 package com.example.authentification_back;
 
 import com.example.authentification_back.config.TestAccountInitializer;
-import com.example.authentification.common.security.SsoHmac;
+import com.example.authentification_back.security.SsoHmac;
 import com.example.authentification_back.service.AuthService;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
