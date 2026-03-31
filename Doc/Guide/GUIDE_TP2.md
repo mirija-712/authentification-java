@@ -1,5 +1,11 @@
 # Guide complet — TP2 : code source et explications
 
+> **Attention (état du dépôt actuel) :** ce guide décrit surtout le **TP2 historique** (login avec **mot de passe** dans le JSON, hash **BCrypt**, colonne `password_hash`).  
+> Dans **ton projet actuel**, le login est **TP3 + TP4** : `LoginRequest` contient `nonce`, `timestamp`, `hmac`, et la colonne SQL est `password_encrypted`.  
+> Pour la **référence à jour** (workflows, chemins, code actuel : `SsoHmac` dans le back, client JavaFX, pas de module `common`), ouvre **[GUIDE_PROJET_COMPLET.md](./GUIDE_PROJET_COMPLET.md)**.
+
+---
+
 Ce document reprend **presque tout le code** du module `authentification_back` tel qu’après le **TP2**, avec une **explication du rôle** de chaque partie. À utiliser comme support pour **recoder** ou **réviser** l’examen.
 
 **Table des matières**

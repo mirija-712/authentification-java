@@ -1,5 +1,6 @@
 package com.example.authentification_back.controller;
 
+import com.example.authentification_back.dto.ChangePasswordRequest;
 import com.example.authentification_back.dto.LoginRequest;
 import com.example.authentification_back.dto.RegisterRequest;
 import com.example.authentification_back.dto.UserResponse;
@@ -10,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,6 +42,16 @@ public class AuthController {
 	@PostMapping("/auth/login")
 	public ResponseEntity<UserResponse> login(@Valid @RequestBody LoginRequest request) {
 		return ResponseEntity.ok(authService.login(request));
+	}
+
+	/** TP5 — authentification requise (Bearer ou {@code X-Auth-Token}). */
+	@PutMapping("/auth/change-password")
+	public ResponseEntity<Void> changePassword(
+			@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+			@RequestHeader(value = "X-Auth-Token", required = false) String authToken,
+			@Valid @RequestBody ChangePasswordRequest request) {
+		authService.changePassword(resolveToken(authorization, authToken), request);
+		return ResponseEntity.noContent().build();
 	}
 
 	@GetMapping("/me")

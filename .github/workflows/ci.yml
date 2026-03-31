@@ -1,5 +1,5 @@
 # =============================================================================
-# TP4 — Intégration continue (cœur de l’énoncé)
+# TP4 + TP5 — CI : Maven, SonarCloud, image Docker
 # =============================================================================
 # Déclencheurs : chaque push et chaque PR vers la branche main.
 # Étapes implicites : checkout → JDK → mvn verify (compile + tests) → SonarCloud.
@@ -43,3 +43,6 @@ jobs:
           APP_MASTER_KEY: test_master_key_for_ci_only
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: mvn -B verify sonar:sonar -Dsonar.token=${SONAR_TOKEN}
+
+      - name: Build Docker image
+        run: docker build -t cdwfs-auth-app:ci .

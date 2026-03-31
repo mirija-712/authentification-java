@@ -1,6 +1,7 @@
 package com.example.authentification_back.service;
 
 import com.example.authentification_back.config.AuthSecurityProperties;
+import com.example.authentification_back.dto.ChangePasswordRequest;
 import com.example.authentification_back.dto.LoginRequest;
 import com.example.authentification_back.dto.RegisterRequest;
 import com.example.authentification_back.dto.UserResponse;
@@ -20,6 +21,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -186,6 +189,53 @@ public class AuthService {
 		return userRepository.findByToken(token)
 				.map(UserResponse::profile)
 				.orElseThrow(() -> new AuthenticationFailedException("Token invalide"));
+	}
+
+	/**
+	 * TP5 — changement de mot de passe pour un utilisateur identifié par son jeton de session.
+	 */
+	@Transactional
+	public void changePassword(String rawToken, ChangePasswordRequest request) {
+		User user = requireUserByToken(rawToken);
+
+		String currentPlain;
+		try {
+			currentPlain = passwordEncryptionService.decrypt(user.getPasswordEncrypted());
+		} catch (Exception e) {
+			log.warn("Déchiffrement impossible pour user id={}", user.getId());
+			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
+		}
+
+		if (!constantTimeEqualsUtf8(currentPlain, request.oldPassword())) {
+			log.warn("Changement mot de passe refusé: ancien mot de passe invalide user id={}", user.getId());
+			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
+		}
+		if (!request.newPassword().equals(request.confirmPassword())) {
+			throw new InvalidInputException("Les mots de passe ne correspondent pas");
+		}
+
+		passwordPolicyValidator.assertCompliant(request.newPassword());
+		user.setPasswordEncrypted(passwordEncryptionService.encrypt(request.newPassword()));
+		userRepository.save(user);
+		log.info("Changement mot de passe réussi user id={}", user.getId());
+	}
+
+	private User requireUserByToken(String rawToken) {
+		if (rawToken == null || rawToken.isBlank()) {
+			throw new AuthenticationFailedException("Authentification requise");
+		}
+		String token = rawToken.trim();
+		return userRepository.findByToken(token)
+				.orElseThrow(() -> new AuthenticationFailedException("Token invalide"));
+	}
+
+	private static boolean constantTimeEqualsUtf8(String a, String b) {
+		if (a == null || b == null) {
+			return false;
+		}
+		byte[] aa = a.getBytes(StandardCharsets.UTF_8);
+		byte[] bb = b.getBytes(StandardCharsets.UTF_8);
+		return MessageDigest.isEqual(aa, bb);
 	}
 
 	private static String normalizeEmail(String email) {

@@ -300,6 +300,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
+          # JDK 21 : le réacteur compile le front JavaFX (module-path) et le back (--release 17).
           java-version: "21"
           cache: maven
       - name: Maven verify + SonarCloud
@@ -360,6 +361,8 @@ Ordre conseillé:
 | Guide TP3 | [`./GUIDE_TP3.md`](./GUIDE_TP3.md) |
 | Service chiffrement | `authentification_back/src/main/java/com/example/authentification_back/security/PasswordEncryptionService.java` |
 | Service auth | `authentification_back/src/main/java/com/example/authentification_back/service/AuthService.java` |
+| HMAC TP3 (backend) | `authentification_back/src/main/java/com/example/authentification_back/security/SsoHmac.java` |
+| **Guide projet (vue complète)** | [`./GUIDE_PROJET_COMPLET.md`](./GUIDE_PROJET_COMPLET.md) |
 | Seed compte test | `authentification_back/src/main/java/com/example/authentification_back/config/TestAccountInitializer.java` |
 | Config backend | `authentification_back/src/main/resources/application.properties` |
 | CI | [`../../.github/workflows/ci.yml`](../../.github/workflows/ci.yml) |

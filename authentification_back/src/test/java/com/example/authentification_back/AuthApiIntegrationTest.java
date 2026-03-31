@@ -23,6 +23,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -54,6 +55,23 @@ class AuthApiIntegrationTest {
 		return String.format(Locale.ROOT,
 				"{\"email\":\"%s\",\"nonce\":\"%s\",\"timestamp\":%d,\"hmac\":\"%s\"}",
 				em, nonce, epochSeconds, hmac);
+	}
+
+	private static String changePasswordJson(String oldPassword, String newPassword, String confirmPassword) {
+		return String.format(Locale.ROOT,
+				"{\"oldPassword\":\"%s\",\"newPassword\":\"%s\",\"confirmPassword\":\"%s\"}",
+				oldPassword, newPassword, confirmPassword);
+	}
+
+	private String loginAndExtractToken(String email, String password) throws Exception {
+		String nonce = UUID.randomUUID().toString();
+		long ts = Instant.now().getEpochSecond();
+		MvcResult login = mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(loginHmacJson(email, password, nonce, ts)))
+				.andExpect(status().isOk())
+				.andReturn();
+		return JsonPath.read(login.getResponse().getContentAsString(), "$.token");
 	}
 
 	@Test
@@ -257,5 +275,89 @@ class AuthApiIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(loginHmacJson(email, strong, UUID.randomUUID().toString(), Instant.now().getEpochSecond())))
 				.andExpect(status().isOk());
+	}
+
+	@Test
+	void change_password_success_then_old_login_fails_and_new_login_works() throws Exception {
+		String email = "tp5-success@example.com";
+		String oldPassword = "Bb2!bbbbbbbb";
+		String newPassword = "Cc3!cccccccc";
+		mockMvc.perform(post("/api/auth/register")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(registerJson(email, oldPassword, oldPassword)))
+				.andExpect(status().isCreated());
+		String token = loginAndExtractToken(email, oldPassword);
+
+		mockMvc.perform(put("/api/auth/change-password")
+						.contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+						.content(changePasswordJson(oldPassword, newPassword, newPassword)))
+				.andExpect(status().isNoContent());
+
+		mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(loginHmacJson(email, oldPassword, UUID.randomUUID().toString(), Instant.now().getEpochSecond())))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
+
+		mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(loginHmacJson(email, newPassword, UUID.randomUUID().toString(), Instant.now().getEpochSecond())))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void change_password_rejects_when_old_password_is_wrong() throws Exception {
+		String email = "tp5-wrong-old@example.com";
+		String oldPassword = "Dd4!dddddddd";
+		String newPassword = "Ee5!eeeeeeee";
+		mockMvc.perform(post("/api/auth/register")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(registerJson(email, oldPassword, oldPassword)))
+				.andExpect(status().isCreated());
+		String token = loginAndExtractToken(email, oldPassword);
+
+		mockMvc.perform(put("/api/auth/change-password")
+						.contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+						.content(changePasswordJson("WrongPwd1!", newPassword, newPassword)))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
+	}
+
+	@Test
+	void change_password_rejects_when_confirmation_differs() throws Exception {
+		String token = loginAndExtractToken(
+				TestAccountInitializer.TEST_EMAIL,
+				TestAccountInitializer.TEST_PASSWORD_PLAIN);
+
+		mockMvc.perform(put("/api/auth/change-password")
+						.contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+						.content(changePasswordJson("Pwd1234!abcd", "Ff6!ffffffff", "Mismatch1!")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Les mots de passe ne correspondent pas"));
+	}
+
+	@Test
+	void change_password_rejects_weak_new_password() throws Exception {
+		String token = loginAndExtractToken(
+				TestAccountInitializer.TEST_EMAIL,
+				TestAccountInitializer.TEST_PASSWORD_PLAIN);
+
+		mockMvc.perform(put("/api/auth/change-password")
+						.contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+						.content(changePasswordJson("Pwd1234!abcd", "weak", "weak")))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void change_password_rejects_invalid_user_or_token() throws Exception {
+		mockMvc.perform(put("/api/auth/change-password")
+						.contentType(MediaType.APPLICATION_JSON)
+						.header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token")
+						.content(changePasswordJson("AnyOld1!", "Gg7!gggggggg", "Gg7!gggggggg")))
+				.andExpect(status().isUnauthorized());
 	}
 }
