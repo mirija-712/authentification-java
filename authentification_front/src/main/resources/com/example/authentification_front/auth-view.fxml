@@ -13,6 +13,7 @@
             </padding>
             <Label text="URL de l'API :"/>
             <TextField fx:id="apiBaseUrl" prefColumnCount="40" promptText="http://localhost:8080"/>
+            <CheckBox fx:id="showPasswords" text="Afficher les mots de passe" mnemonicParsing="false"/>
         </HBox>
     </top>
     <center>
@@ -27,8 +28,11 @@
                         <TextField fx:id="loginEmail" promptText="vous@example.com" GridPane.columnIndex="1"
                                    GridPane.rowIndex="0" prefWidth="320"/>
                         <Label text="Mot de passe :" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
-                        <PasswordField fx:id="loginPassword" GridPane.columnIndex="1" GridPane.rowIndex="1"
-                                       prefWidth="320"/>
+                        <StackPane maxWidth="320" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                            <PasswordField fx:id="loginPassword" prefWidth="320" maxWidth="Infinity"/>
+                            <TextField fx:id="loginPasswordPlain" prefWidth="320" maxWidth="Infinity" visible="false"
+                                       managed="false"/>
+                        </StackPane>
                     </GridPane>
                     <HBox spacing="10">
                         <Button text="Se connecter" onAction="#onLogin" defaultButton="true"/>
@@ -45,11 +49,17 @@
                         <Label text="Email :" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
                         <TextField fx:id="regEmail" GridPane.columnIndex="1" GridPane.rowIndex="0" prefWidth="320"/>
                         <Label text="Mot de passe :" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
-                        <PasswordField fx:id="regPassword" GridPane.columnIndex="1" GridPane.rowIndex="1"
-                                       prefWidth="320"/>
+                        <StackPane maxWidth="320" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                            <PasswordField fx:id="regPassword" prefWidth="320" maxWidth="Infinity"/>
+                            <TextField fx:id="regPasswordPlain" prefWidth="320" maxWidth="Infinity" visible="false"
+                                       managed="false"/>
+                        </StackPane>
                         <Label text="Confirmation :" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
-                        <PasswordField fx:id="regConfirm" GridPane.columnIndex="1" GridPane.rowIndex="2"
-                                       prefWidth="320"/>
+                        <StackPane maxWidth="320" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                            <PasswordField fx:id="regConfirm" prefWidth="320" maxWidth="Infinity"/>
+                            <TextField fx:id="regConfirmPlain" prefWidth="320" maxWidth="Infinity" visible="false"
+                                       managed="false"/>
+                        </StackPane>
                     </GridPane>
                     <Label fx:id="strengthLabel" text="Force : —"/>
                     <HBox spacing="10">
@@ -71,6 +81,38 @@
                     </HBox>
                     <Label fx:id="profileHint" text="Connectez-vous dans l'onglet Connexion pour obtenir un jeton."
                            wrapText="true" maxWidth="600"/>
+                </VBox>
+            </Tab>
+            <Tab text="Mot de passe">
+                <VBox spacing="10">
+                    <padding>
+                        <Insets top="16" right="16" bottom="16" left="16"/>
+                    </padding>
+                    <Label text="TP5 : PUT /api/auth/change-password (jeton requis)"/>
+                    <GridPane hgap="10" vgap="8">
+                        <Label text="Ancien mot de passe :" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                        <StackPane maxWidth="320" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                            <PasswordField fx:id="changeOldPassword" prefWidth="320" maxWidth="Infinity"/>
+                            <TextField fx:id="changeOldPlain" prefWidth="320" maxWidth="Infinity" visible="false"
+                                       managed="false"/>
+                        </StackPane>
+                        <Label text="Nouveau mot de passe :" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                        <StackPane maxWidth="320" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                            <PasswordField fx:id="changeNewPassword" prefWidth="320" maxWidth="Infinity"/>
+                            <TextField fx:id="changeNewPlain" prefWidth="320" maxWidth="Infinity" visible="false"
+                                       managed="false"/>
+                        </StackPane>
+                        <Label text="Confirmation :" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+                        <StackPane maxWidth="320" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                            <PasswordField fx:id="changeConfirmPassword" prefWidth="320" maxWidth="Infinity"/>
+                            <TextField fx:id="changeConfirmPlain" prefWidth="320" maxWidth="Infinity" visible="false"
+                                       managed="false"/>
+                        </StackPane>
+                    </GridPane>
+                    <HBox spacing="10">
+                        <Button text="Changer le mot de passe" onAction="#onChangePassword"/>
+                    </HBox>
+                    <Label fx:id="changePasswordMessage" wrapText="true" maxWidth="620"/>
                 </VBox>
             </Tab>
         </TabPane>

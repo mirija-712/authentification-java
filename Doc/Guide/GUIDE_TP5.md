@@ -1,6 +1,8 @@
-# Guide détaillé TP5 — changement de mot de passe, Docker, CI
+# Guide détaillé TP5 — changement de mot de passe, interface JavaFX, Docker, CI
 
-Ce document explique **tout ce qui a été ajouté** pour le TP5 dans ton dépôt : rôle de chaque fichier, **logique métier**, **comment tester** (Postman), et **comment utiliser Docker Desktop** sous Windows.
+Ce document explique **tout ce qui a été ajouté** pour le TP5 dans ton dépôt : rôle de chaque fichier, **logique métier** côté serveur, **comment tester** avec **Postman** ou l’**interface JavaFX** (onglet dédié), et **comment utiliser Docker Desktop** sous Windows.
+
+**Rappel par rapport à l’énoncé PDF du cours :** le TP5 officiel exige surtout l’**API REST**, les **tests**, **Docker** et la **CI**. L’**onglet « Mot de passe »** dans `authentification_front` est une **extension du dépôt** : elle appelle le même `PUT /api/auth/change-password` que Postman, avec le **jeton** obtenu après connexion HMAC (TP3).
 
 ---
 
@@ -10,7 +12,7 @@ Ce document explique **tout ce qui a été ajouté** pour le TP5 dans ton dépô
 2. [Vue d’ensemble du flux « changement de mot de passe »](#2-vue-densemble-du-flux-changement-de-mot-de-passe)
 3. [Fichiers créés ou modifiés](#3-fichiers-créés-ou-modifiés)
 4. [Code et implémentation commentée](#4-code-et-implémentation-commentée)
-5. [Contrat API et exemples Postman](#5-contrat-api-et-exemples-postman)
+5. [Contrat API et tests (Postman + JavaFX)](#5-contrat-api-et-tests-postman--javafx)
 6. [Tests automatisés (JUnit)](#6-tests-automatisés-junit)
 7. [Docker : concepts rapides](#7-docker--concepts-rapides)
 8. [Docker Desktop sur Windows — installation et réglages](#8-docker-desktop-sur-windows--installation-et-réglages)
@@ -31,8 +33,7 @@ Ce document explique **tout ce qui a été ajouté** pour le TP5 dans ton dépô
 | **Docker** | `Dockerfile` à la **racine** du dépôt : construit une image qui exécute le JAR Spring Boot. |
 | **`.dockerignore`** | Réduit le contexte envoyé à Docker (évite `.git`, `target`, etc.). |
 | **CI** | Après `mvn verify` + Sonar, la pipeline lance **`docker build`**. |
-
-**Non inclus** : écran JavaFX dédié au changement de mot de passe. Tu peux tout tester avec **Postman** (ou curl). Le front existant reste centré sur inscription / connexion HMAC / profil.
+| **Front JavaFX** *(extension dépôt)* | Onglet **Mot de passe** : formulaire + appel HTTP `PUT /api/auth/change-password` avec `Authorization: Bearer <token>` (jeton mémorisé après **Connexion**). |
 
 ---
 
@@ -40,7 +41,7 @@ Ce document explique **tout ce qui a été ajouté** pour le TP5 dans ton dépô
 
 ```mermaid
 sequenceDiagram
-  participant C as Client (Postman)
+  participant C as Client (Postman ou JavaFX)
   participant API as AuthController
   participant S as AuthService
   participant P as PasswordEncryptionService
@@ -55,7 +56,7 @@ sequenceDiagram
   S->>S: new == confirm ? politique OK ?
   S->>P: encrypt(newPassword)
   S->>DB: save User
-  API-->>C: 204 No Content
+  API-->>C: 200 OK + {"message":"Mot de passe changé avec succès"}
 ```
 
 **Points importants :**
@@ -73,6 +74,9 @@ sequenceDiagram
 | `authentification_back/.../service/AuthService.java` | **Modifié** — méthodes `changePassword`, `requireUserByToken`, `constantTimeEqualsUtf8`. |
 | `authentification_back/.../controller/AuthController.java` | **Modifié** — mapping `PUT /auth/change-password`. |
 | `authentification_back/.../AuthApiIntegrationTest.java` | **Modifié** — 5 tests TP5 + helpers `changePasswordJson`, `loginAndExtractToken`. |
+| `authentification_front/.../api/AuthApiClient.java` | **Modifié** — méthode `changePassword(...)` (PUT avec Bearer token). |
+| `authentification_front/.../AuthViewController.java` | **Modifié** — gestion UI/état du changement de mot de passe. |
+| `authentification_front/.../auth-view.fxml` | **Modifié** — nouvel onglet « Mot de passe ». |
 | `Dockerfile` | **Créé** (racine du dépôt). |
 | `.dockerignore` | **Créé** (racine). |
 | `.github/workflows/ci.yml` | **Modifié** — étape `docker build`. |
@@ -118,14 +122,13 @@ Extrait du endpoint TP5 :
 ```java
 /** TP5 — authentification requise (Bearer ou {@code X-Auth-Token}). */
 @PutMapping("/auth/change-password")
-public ResponseEntity<Void> changePassword(
+public ResponseEntity<Map<String, String>> changePassword(
 		@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
 		@RequestHeader(value = "X-Auth-Token", required = false) String authToken,
 		@Valid @RequestBody ChangePasswordRequest request) {
 	// resolveToken réutilise la même logique que /api/me : "Bearer xxx" ou jeton brut / X-Auth-Token
 	authService.changePassword(resolveToken(authorization, authToken), request);
-	// 204 = succès sans corps (standard pour une action qui ne renvoie pas de représentation)
-	return ResponseEntity.noContent().build();
+	return ResponseEntity.ok(Map.of("message", "Mot de passe changé avec succès"));
 }
 ```
 
@@ -133,9 +136,9 @@ public ResponseEntity<Void> changePassword(
 
 | Situation | Code |
 |-----------|------|
-| Succès | **204 No Content** |
+| Succès | **200 OK** + `{"message":"Mot de passe changé avec succès"}` |
 | Jeton absent / invalide | **401 Unauthorized** (`AuthenticationFailedException`) |
-| Ancien mot de passe incorrect | **401** (même message générique que le login, pour ne pas divulguer trop d’info) |
+| Ancien mot de passe incorrect | **400** avec message `Ancien mot de passe incorrect` |
 | new ≠ confirm | **400** (`InvalidInputException`) |
 | Politique mot de passe non respectée | **400** |
 
@@ -166,7 +169,7 @@ public void changePassword(String rawToken, ChangePasswordRequest request) {
 	// 3) Vérifier l'ancien mot de passe saisi — comparaison en temps constant sur octets UTF-8
 	if (!constantTimeEqualsUtf8(currentPlain, request.oldPassword())) {
 		log.warn("Changement mot de passe refusé: ancien mot de passe invalide user id={}", user.getId());
-		throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
+		throw new InvalidInputException("Ancien mot de passe incorrect");
 	}
 	// 4) Cohérence nouveau / confirmation
 	if (!request.newPassword().equals(request.confirmPassword())) {
@@ -188,7 +191,185 @@ public void changePassword(String rawToken, ChangePasswordRequest request) {
 
 ---
 
-## 5. Contrat API et exemples Postman
+### 4.4 Client JavaFX — onglet « Mot de passe » (`authentification_front`)
+
+**Fichiers concernés :**
+
+| Fichier | Rôle |
+|---------|------|
+| `authentification_front/src/main/resources/com/example/authentification_front/auth-view.fxml` | Déclare l’onglet **Mot de passe**, les `fx:id` et le bouton `onAction="#onChangePassword"`. |
+| `authentification_front/src/main/java/com/example/authentification_front/AuthViewController.java` | Injecte les contrôles FXML, garde `authToken`, appelle `AuthApiClient.changePassword`. |
+| `authentification_front/src/main/java/com/example/authentification_front/api/AuthApiClient.java` | Envoie le `PUT` HTTP avec JSON + en-tête Bearer. |
+
+---
+
+#### 4.4.1 Vue FXML — onglet ajouté (`auth-view.fxml`)
+
+Le reste du fichier (Connexion, Inscription, Profil) existait déjà ; **ce bloc est l’ajout TP5** : un quatrième `<Tab>` dans le `TabPane`.
+
+**Explications rapides :**
+
+- `fx:controller` en tête du fichier (non recopié ici) pointe déjà vers `AuthViewController` : toutes les méthodes `#on…` sont dans cette classe.
+- `PasswordField` masque la saisie (comme pour login / inscription).
+- `onAction="#onChangePassword"` : clic → appel de la méthode annotée `@FXML` du même nom dans le contrôleur.
+- `fx:id` : JavaFX injecte ces nœuds dans les champs `private` du contrôleur portant le **même nom**.
+
+```xml
+<Tab text="Mot de passe">
+    <VBox spacing="10">
+        <padding>
+            <Insets top="16" right="16" bottom="16" left="16"/>
+        </padding>
+        <Label text="TP5 : PUT /api/auth/change-password (jeton requis)"/>
+        <GridPane hgap="10" vgap="8">
+            <Label text="Ancien mot de passe :" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+            <PasswordField fx:id="changeOldPassword" GridPane.columnIndex="1" GridPane.rowIndex="0"
+                           prefWidth="320"/>
+            <Label text="Nouveau mot de passe :" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+            <PasswordField fx:id="changeNewPassword" GridPane.columnIndex="1" GridPane.rowIndex="1"
+                           prefWidth="320"/>
+            <Label text="Confirmation :" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+            <PasswordField fx:id="changeConfirmPassword" GridPane.columnIndex="1" GridPane.rowIndex="2"
+                           prefWidth="320"/>
+        </GridPane>
+        <HBox spacing="10">
+            <Button text="Changer le mot de passe" onAction="#onChangePassword"/>
+        </HBox>
+        <Label fx:id="changePasswordMessage" wrapText="true" maxWidth="620"/>
+    </VBox>
+</Tab>
+```
+
+---
+
+#### 4.4.2 Contrôleur — champs injectés et logique (`AuthViewController.java`)
+
+**Nouveaux `@FXML` (liaison avec le FXML ci-dessus) :**
+
+```java
+@FXML
+private PasswordField changeOldPassword;
+@FXML
+private PasswordField changeNewPassword;
+@FXML
+private PasswordField changeConfirmPassword;
+@FXML
+private Label changePasswordMessage;
+```
+
+**Import ajouté** pour le type de réponse succès du `PUT` :
+
+```java
+import com.example.authentification_front.api.AuthApiClient.MessageDto;
+```
+
+**Au démarrage de l’écran** (`initialize`) : texte d’invite sur l’onglet Mot de passe (gris) pour rappeler qu’il faut se connecter avant.
+
+```java
+changePasswordMessage.setText("Connectez-vous pour activer le changement de mot de passe.");
+changePasswordMessage.setStyle("-fx-text-fill: #666;");
+```
+
+**Lien indispensable avec le TP5 : le jeton.** Après une connexion réussie, `onLogin` enregistre déjà `authToken` (réponse `UserDto.token`). C’est **ce même jeton** qui sert pour `/api/me` et pour `change-password` — aucun champ « token » dans l’UI, tout est en mémoire.
+
+```java
+authToken = u.token;
+```
+
+**Déconnexion** : en plus d’effacer le jeton pour le profil, on remet un message neutre sur l’onglet Mot de passe.
+
+```java
+@FXML
+private void onLogout() {
+	authToken = null;
+	profileArea.setText("Déconnecté : jeton oublié côté client.");
+	profileHint.setText("Reconnectez-vous pour obtenir un nouveau jeton.");
+	changePasswordMessage.setText("Déconnecté : reconnectez-vous avant de changer le mot de passe.");
+	changePasswordMessage.setStyle("-fx-text-fill: #666;");
+}
+```
+
+**Action du bouton « Changer le mot de passe » :**
+
+1. Recrée un `AuthApiClient` avec l’URL saisie en haut de fenêtre (comme les autres actions).
+2. Sans jeton → message d’erreur local, **pas** d’appel réseau.
+3. Avec jeton → `client.changePassword(...)` avec les trois champs.
+4. Succès → message vert (texte du JSON `message` si présent), vidage des trois `PasswordField`.
+5. Erreur → message rouge + code HTTP si disponible.
+
+```java
+@FXML
+private void onChangePassword() {
+	client = new AuthApiClient(apiBaseUrl.getText());
+	changePasswordMessage.setStyle("-fx-text-fill: red;");
+	if (authToken == null || authToken.isBlank()) {
+		changePasswordMessage.setText("Impossible : aucun jeton actif. Connectez-vous d'abord.");
+		return;
+	}
+	ApiResult<MessageDto> r = client.changePassword(authToken, changeOldPassword.getText(), changeNewPassword.getText(),
+			changeConfirmPassword.getText());
+	if (r instanceof ApiResult.Ok<?> ok) {
+		MessageDto body = (MessageDto) ok.value();
+		changePasswordMessage.setText(
+				body != null && body.message != null && !body.message.isBlank() ? body.message : "Mot de passe changé.");
+		changePasswordMessage.setStyle("-fx-text-fill: green;");
+		changeOldPassword.clear();
+		changeNewPassword.clear();
+		changeConfirmPassword.clear();
+	} else if (r instanceof ApiResult.Err<?> err) {
+		changePasswordMessage.setText(err.message() + (err.httpStatus() > 0 ? " (HTTP " + err.httpStatus() + ")" : ""));
+	}
+}
+```
+
+---
+
+#### 4.4.3 Client HTTP — `changePassword` et DTO `MessageDto` (`AuthApiClient.java`)
+
+**DTO** pour désérialiser la réponse **200** `{ "message": "…" }` avec Gson (champs publics) :
+
+```java
+/** DTO simple pour les réponses de type {"message":"..."}. */
+public static class MessageDto {
+	public String message;
+}
+```
+
+**Méthode ajoutée pour le TP5 :**
+
+```java
+public ApiResult<MessageDto> changePassword(String bearerToken, String oldPassword, String newPassword,
+		String confirmPassword) {
+	String json = String.format("{\"oldPassword\":%s,\"newPassword\":%s,\"confirmPassword\":%s}",
+			gson.toJson(oldPassword), gson.toJson(newPassword), gson.toJson(confirmPassword));
+	try {
+		HttpRequest req = HttpRequest.newBuilder()
+				.uri(URI.create(baseUrl + "/api/auth/change-password"))
+				.timeout(Duration.ofSeconds(30))
+				.header("Content-Type", "application/json")
+				.header("Authorization", "Bearer " + bearerToken)
+				.PUT(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+				.build();
+		HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+		return mapResponse(res, MessageDto.class, 200);
+	} catch (Exception e) {
+		return new ApiResult.Err<>("Erreur réseau : " + e.getMessage(), 0);
+	}
+}
+```
+
+**Remarques :**
+
+- `gson.toJson(...)` sur chaque champ évite les problèmes d’échappement dans le JSON (guillemets, backslash, etc.).
+- Seul **`Authorization: Bearer`** est utilisé côté front ; le backend accepte aussi `X-Auth-Token` (voir contrôleur), mais ce n’est pas nécessaire ici.
+
+---
+
+**Note :** l’onglet **Inscription** affiche encore l’**indicateur de force** (TP2 côté client). L’onglet **Mot de passe** ne refait pas cette jauge : la **politique** du nouveau mot de passe est appliquée **côté serveur** (`PasswordPolicyValidator`) ; en cas de mot de passe trop faible, l’API répond **400** et le label d’erreur l’affiche.
+
+---
+
+## 5. Contrat API et tests (Postman + JavaFX)
 
 ### 5.1 Obtenir un jeton (rappel TP3)
 
@@ -215,9 +396,51 @@ Pour un test rapide, tu peux t’inspirer des tests : message signé `email:nonc
 }
 ```
 
-4. Réponse attendue : **204 No Content** (corps vide).
+4. Réponse attendue : **200 OK** avec ce JSON :
+
+```json
+{
+  "message": "Mot de passe changé avec succès"
+}
+```
 
 **Important :** l’application **doit** avoir **`APP_MASTER_KEY`** définie au démarrage (variable d’environnement), sinon elle ne démarre pas (TP4).
+
+### 5.3 Tester via l’interface JavaFX (`authentification_front`)
+
+**Prérequis :**
+
+- Backend démarré avec **`APP_MASTER_KEY`** définie (sinon le serveur ne démarre pas — TP4).
+- URL API correcte en haut de la fenêtre (souvent `http://localhost:8080`).
+
+**Lancer le client :**
+
+À la racine du module front (JDK **21** recommandé, aligné sur le `pom.xml`) :
+
+```powershell
+cd "D:\tp\spring boot\authentification\authentification_front"
+.\mvnw.cmd javafx:run
+```
+
+*(Si `mvn` est installé globalement, `mvn javafx:run` équivalent.)*
+
+**Scénario pas à pas :**
+
+1. Onglet **Connexion** : identifiant + mot de passe actuel → **Se connecter**. Le client calcule le login **HMAC** (TP3) et stocke le **jeton** en mémoire.
+2. Onglet **Mot de passe** :
+   - **Ancien mot de passe** = celui utilisé à la connexion ;
+   - **Nouveau** et **Confirmation** identiques, conformes à la politique (12 car., maj, min, chiffre, spécial) ;
+   - **Changer le mot de passe**.
+3. En succès, le message du serveur s’affiche (ex. `Mot de passe changé avec succès`) et les champs sont vidés.
+4. **Vérification** : onglet **Connexion** → tentative avec l’**ancien** mot de passe : doit échouer ; avec le **nouveau** : doit réussir.
+
+**Comportements utiles à connaître :**
+
+| Situation | Comportement |
+|-----------|----------------|
+| Clic sur **Changer** sans s’être connecté avant | Message : pas de jeton actif. |
+| **Déconnexion (oublier le jeton)** dans l’onglet Profil | Le jeton est effacé ; l’onglet Mot de passe invite à se reconnecter. |
+| Erreur 401 / jeton expiré selon config serveur | Message d’erreur affiché comme pour les autres appels API. |
 
 ---
 
@@ -228,7 +451,7 @@ Pour un test rapide, tu peux t’inspirer des tests : message signé `email:nonc
 | Test | Ce qui est vérifié |
 |------|---------------------|
 | `change_passwordsuccess_then_old_login_fails_and_new_login_works` | Après changement, login HMAC avec **ancien** mot de passe échoue, avec **nouveau** réussit. |
-| `change_password_rejects_when_old_password_is_wrong` | **401** si ancien incorrect. |
+| `change_password_rejects_when_old_password_is_wrong` | **400** + message `Ancien mot de passe incorrect` si ancien incorrect. |
 | `change_password_rejects_when_confirmation_differs` | **400** si new ≠ confirm. |
 | `change_password_rejects_weak_new_password` | **400** si politique non respectée. |
 | `change_password_rejects_invalid_user_or_token` | **401** si Bearer fictif. |
@@ -259,6 +482,8 @@ Ton `Dockerfile` est en **deux étapes** (**multi-stage**) :
 2. **Stage final** : petite image **JRE 17** → copie uniquement le JAR, lance `java -jar`.
 
 **Pourquoi deux étapes ?** Tu n’embarques pas Maven ni les sources dans l’image finale : image plus **légère** et plus **sûre** pour la prod.
+
+Pour une explication plus large (à quoi sert Docker, différence image/conteneur, pièges), voir aussi **[GUIDE_DOCKER_COMPLET.md](./GUIDE_DOCKER_COMPLET.md)**.
 
 ---
 
@@ -402,8 +627,9 @@ Les runners GitHub ont Docker disponible : si **`mvn verify`** est vert, **`dock
 
 ## Synthèse
 
-- **TP5 fonctionnel côté code** : endpoint + service + DTO + tests + Docker + CI.  
-- **Test manuel** : Postman + token Bearer + `PUT /api/auth/change-password`.  
-- **Docker Desktop** : construire à la racine, lancer avec **`APP_MASTER_KEY`**, gérer **MySQL** si tu exécutes l’image hors d’un environnement déjà configuré.
+- **TP5 côté serveur (aligné énoncé)** : `PUT /api/auth/change-password` + sécurité TP4 + tests JUnit + `Dockerfile` + `.dockerignore` + étape **`docker build`** dans GitHub Actions.  
+- **Test manuel API** : Postman (ou curl) avec **Bearer** + JSON `oldPassword` / `newPassword` / `confirmPassword`.  
+- **Test manuel avec UI** : module **`authentification_front`** — connexion HMAC puis onglet **Mot de passe** (même endpoint, jeton en mémoire).  
+- **Docker** : build à la racine du dépôt, `docker run` avec **`APP_MASTER_KEY`** ; MySQL souvent via `host.docker.internal` si la base est sur Windows — détail dans la section 9 et dans **[GUIDE_DOCKER_COMPLET.md](./GUIDE_DOCKER_COMPLET.md)**.
 
-Pour le détail du reste du projet (HMAC, chiffrement, structure Maven), voir aussi **[GUIDE_PROJET_COMPLET.md](./GUIDE_PROJET_COMPLET.md)**.
+Pour le reste du projet (HMAC, chiffrement, structure Maven), voir **[GUIDE_PROJET_COMPLET.md](./GUIDE_PROJET_COMPLET.md)**.

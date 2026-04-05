@@ -39,6 +39,7 @@ import java.util.UUID;
 public class AuthService {
 
 	public static final String GENERIC_LOGIN_ERROR = "Identifiants invalides";
+	public static final String CHANGE_PASSWORD_OLD_PASSWORD_ERROR = "Ancien mot de passe incorrect";
 
 	private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
@@ -208,7 +209,7 @@ public class AuthService {
 
 		if (!constantTimeEqualsUtf8(currentPlain, request.oldPassword())) {
 			log.warn("Changement mot de passe refusé: ancien mot de passe invalide user id={}", user.getId());
-			throw new AuthenticationFailedException(GENERIC_LOGIN_ERROR);
+			throw new InvalidInputException(CHANGE_PASSWORD_OLD_PASSWORD_ERROR);
 		}
 		if (!request.newPassword().equals(request.confirmPassword())) {
 			throw new InvalidInputException("Les mots de passe ne correspondent pas");

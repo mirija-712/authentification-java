@@ -18,12 +18,12 @@
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
-            <version>21.0.6</version>
+            <version>17.0.2</version>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
-            <version>21.0.6</version>
+            <version>17.0.2</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -52,8 +52,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <!-- release + JPMS : même réglage que l’IDE doit appliquer (module-info.java). -->
+                    <release>17</release>
                 </configuration>
             </plugin>
             <plugin>

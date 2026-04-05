@@ -76,6 +76,25 @@ public final class AuthApiClient {
 		}
 	}
 
+	public ApiResult<MessageDto> changePassword(String bearerToken, String oldPassword, String newPassword,
+			String confirmPassword) {
+		String json = String.format("{\"oldPassword\":%s,\"newPassword\":%s,\"confirmPassword\":%s}",
+				gson.toJson(oldPassword), gson.toJson(newPassword), gson.toJson(confirmPassword));
+		try {
+			HttpRequest req = HttpRequest.newBuilder()
+					.uri(URI.create(baseUrl + "/api/auth/change-password"))
+					.timeout(Duration.ofSeconds(30))
+					.header("Content-Type", "application/json")
+					.header("Authorization", "Bearer " + bearerToken)
+					.PUT(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+					.build();
+			HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+			return mapResponse(res, MessageDto.class, 200);
+		} catch (Exception e) {
+			return new ApiResult.Err<>("Erreur réseau : " + e.getMessage(), 0);
+		}
+	}
+
 	private <T> ApiResult<T> postJson(String path, String body, Class<T> okType, int expectedOk) {
 		try {
 			HttpRequest req = HttpRequest.newBuilder()
@@ -129,6 +148,11 @@ public final class AuthApiClient {
 
 	/** Champs publics pour la désérialisation Gson des erreurs API. */
 	public static class ErrorBody {
+		public String message;
+	}
+
+	/** DTO simple pour les réponses de type {"message":"..."}. */
+	public static class MessageDto {
 		public String message;
 	}
 }

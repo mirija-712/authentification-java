@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 /**
  * API TP3 : inscription, {@code POST /api/auth/login} avec email / nonce / timestamp / hmac, profil {@code /api/me}.
  */
@@ -46,12 +48,12 @@ public class AuthController {
 
 	/** TP5 — authentification requise (Bearer ou {@code X-Auth-Token}). */
 	@PutMapping("/auth/change-password")
-	public ResponseEntity<Void> changePassword(
+	public ResponseEntity<Map<String, String>> changePassword(
 			@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
 			@RequestHeader(value = "X-Auth-Token", required = false) String authToken,
 			@Valid @RequestBody ChangePasswordRequest request) {
 		authService.changePassword(resolveToken(authorization, authToken), request);
-		return ResponseEntity.noContent().build();
+		return ResponseEntity.ok(Map.of("message", "Mot de passe changé avec succès"));
 	}
 
 	@GetMapping("/me")

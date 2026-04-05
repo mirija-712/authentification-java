@@ -16,7 +16,13 @@ Ce dossier contient des **guides pédagogiques en français** pour le projet **b
 | **[GUIDE_TP2.md](./GUIDE_TP2.md)** | TP2 : politique mot de passe, verrouillage, **beaucoup de code historique BCrypt** ; le login actuel du dépôt est **HMAC (TP3)** — croiser avec le guide projet. |
 | **[GUIDE_TP3.md](./GUIDE_TP3.md)** | TP3 : nonce, timestamp, **HMAC-SHA256**, anti-rejeu `auth_nonce`, alignement client/serveur. |
 | **[GUIDE_TP4.md](./GUIDE_TP4.md)** | TP4 : **`APP_MASTER_KEY`**, AES-GCM `v1:…`, tests, **GitHub Actions + SonarCloud**. |
-| **[GUIDE_TP5_DETAILLE.md](./GUIDE_TP5_DETAILLE.md)** | **TP5 implémenté** : changement de mot de passe, code commenté, **Postman**, **Docker Desktop** pas à pas, CI, dépannage. |
+| **[GUIDE_TP5.md](./GUIDE_TP5.md)** | **TP5 implémenté** : changement de mot de passe, code commenté, **Postman + interface JavaFX**, **Docker Desktop** pas à pas, CI, dépannage. |
+
+## Guides complémentaires
+
+| Fichier | Contenu |
+|---------|---------|
+| **[GUIDE_DOCKER_COMPLET.md](./GUIDE_DOCKER_COMPLET.md)** | **Docker expliqué en profondeur** : à quoi ça sert vraiment, image vs conteneur, ton `Dockerfile` ligne de ligne, commandes PowerShell, CI, MySQL / `host.docker.internal`, pièges fréquents, glossaire. |
 
 ## README des modules
 
@@ -28,4 +34,4 @@ Ce dossier contient des **guides pédagogiques en français** pour le projet **b
 ## Ordre de lecture conseillé
 
 1. **GUIDE_PROJET_COMPLET.md** — vue d’ensemble et code actuel.
-2. **GUIDE_TP1** → **TP2** → **TP3** → **TP4** — progression pédagogique du sujet.
+2. **GUIDE_TP1** → **TP2** → **TP3** → **TP4** → **TP5** — progression pédagogique du sujet.

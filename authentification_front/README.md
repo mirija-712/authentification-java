@@ -23,6 +23,7 @@ Ou exécuter la classe **`Launcher`** depuis l’IDE.
 - **Connexion** : récupère le **jeton** et le garde en mémoire pour `/api/me`.
 - **Inscription** : `password` + `passwordConfirm` + **indicateur de force** (rouge / orange / vert), comme demandé au TP2 côté client.
 - **Profil** : appelle `GET /api/me` avec `Authorization: Bearer <token>`.
+- **Mot de passe (TP5)** : appelle `PUT /api/auth/change-password` avec le jeton actif.
 
 ## Couplage avec le backend
 

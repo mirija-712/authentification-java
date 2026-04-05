@@ -292,7 +292,8 @@ class AuthApiIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
 						.content(changePasswordJson(oldPassword, newPassword, newPassword)))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value("Mot de passe changé avec succès"));
 
 		mockMvc.perform(post("/api/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
@@ -321,8 +322,8 @@ class AuthApiIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
 						.content(changePasswordJson("WrongPwd1!", newPassword, newPassword)))
-				.andExpect(status().isUnauthorized())
-				.andExpect(jsonPath("$.message").value(AuthService.GENERIC_LOGIN_ERROR));
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(AuthService.CHANGE_PASSWORD_OLD_PASSWORD_ERROR));
 	}
 
 	@Test
