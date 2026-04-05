@@ -19,49 +19,49 @@ import javafx.scene.control.TextField;
 public class AuthViewController {
 
 	@FXML
-	private TextField apiBaseUrl;
+	TextField apiBaseUrl;
 	@FXML
-	private CheckBox showPasswords;
+	CheckBox showPasswords;
 	@FXML
-	private TextField loginEmail;
+	TextField loginEmail;
 	@FXML
-	private PasswordField loginPassword;
+	PasswordField loginPassword;
 	@FXML
-	private TextField loginPasswordPlain;
+	TextField loginPasswordPlain;
 	@FXML
-	private Label loginMessage;
+	Label loginMessage;
 	@FXML
-	private TextField regEmail;
+	TextField regEmail;
 	@FXML
-	private PasswordField regPassword;
+	PasswordField regPassword;
 	@FXML
-	private TextField regPasswordPlain;
+	TextField regPasswordPlain;
 	@FXML
-	private PasswordField regConfirm;
+	PasswordField regConfirm;
 	@FXML
-	private TextField regConfirmPlain;
+	TextField regConfirmPlain;
 	@FXML
-	private Label strengthLabel;
+	Label strengthLabel;
 	@FXML
-	private Label registerMessage;
+	Label registerMessage;
 	@FXML
-	private TextArea profileArea;
+	TextArea profileArea;
 	@FXML
-	private Label profileHint;
+	Label profileHint;
 	@FXML
-	private PasswordField changeOldPassword;
+	PasswordField changeOldPassword;
 	@FXML
-	private TextField changeOldPlain;
+	TextField changeOldPlain;
 	@FXML
-	private PasswordField changeNewPassword;
+	PasswordField changeNewPassword;
 	@FXML
-	private TextField changeNewPlain;
+	TextField changeNewPlain;
 	@FXML
-	private PasswordField changeConfirmPassword;
+	PasswordField changeConfirmPassword;
 	@FXML
-	private TextField changeConfirmPlain;
+	TextField changeConfirmPlain;
 	@FXML
-	private Label changePasswordMessage;
+	Label changePasswordMessage;
 
 	private AuthApiClient client;
 	private String authToken;
@@ -133,7 +133,7 @@ public class AuthViewController {
 	}
 
 	@FXML
-	private void onLogin() {
+	void onLogin() {
 		client = new AuthApiClient(apiBaseUrl.getText());
 		loginMessage.setStyle("-fx-text-fill: red;");
 		ApiResult<UserDto> r = client.login(loginEmail.getText(), passwordText(loginPassword, loginPasswordPlain));
@@ -150,7 +150,7 @@ public class AuthViewController {
 	}
 
 	@FXML
-	private void onRegister() {
+	void onRegister() {
 		client = new AuthApiClient(apiBaseUrl.getText());
 		registerMessage.setStyle("-fx-text-fill: red;");
 		ApiResult<UserDto> r = client.register(regEmail.getText(), passwordText(regPassword, regPasswordPlain),
@@ -165,7 +165,7 @@ public class AuthViewController {
 	}
 
 	@FXML
-	private void onRefreshProfile() {
+	void onRefreshProfile() {
 		client = new AuthApiClient(apiBaseUrl.getText());
 		if (authToken == null || authToken.isBlank()) {
 			profileArea.setText("Pas de jeton : connectez-vous d'abord.");
@@ -181,7 +181,7 @@ public class AuthViewController {
 	}
 
 	@FXML
-	private void onLogout() {
+	void onLogout() {
 		authToken = null;
 		profileArea.setText("Déconnecté : jeton oublié côté client.");
 		profileHint.setText("Reconnectez-vous pour obtenir un nouveau jeton.");
@@ -190,7 +190,7 @@ public class AuthViewController {
 	}
 
 	@FXML
-	private void onChangePassword() {
+	void onChangePassword() {
 		client = new AuthApiClient(apiBaseUrl.getText());
 		changePasswordMessage.setStyle("-fx-text-fill: red;");
 		if (authToken == null || authToken.isBlank()) {

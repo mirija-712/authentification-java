@@ -16,7 +16,7 @@ public class AuthApplication extends Application {
 	public void start(Stage stage) throws IOException {
 		FXMLLoader fxmlLoader = new FXMLLoader(AuthApplication.class.getResource("auth-view.fxml"));
 		Scene scene = new Scene(fxmlLoader.load(), 720, 520);
-		stage.setTitle("Authentification Front");
+		stage.setTitle("Authentification");
 		stage.setScene(scene);
 		stage.setMinWidth(640);
 		stage.setMinHeight(480);

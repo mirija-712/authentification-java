@@ -22,7 +22,7 @@ Ce dossier contient des **guides pédagogiques en français** pour le projet **b
 
 | Fichier | Contenu |
 |---------|---------|
-| **[GUIDE_DOCKER_COMPLET.md](./GUIDE_DOCKER_COMPLET.md)** | **Docker expliqué en profondeur** : à quoi ça sert vraiment, image vs conteneur, ton `Dockerfile` ligne de ligne, commandes PowerShell, CI, MySQL / `host.docker.internal`, pièges fréquents, glossaire. |
+| **[GUIDE_DOCKER_COMPLET.md](./GUIDE_DOCKER_COMPLET.md)** | **Docker expliqué en profondeur** + **tutoriel pas à pas** (MySQL + API depuis zéro, explications à chaque étape), image vs conteneur, `Dockerfile`, CI, pièges fréquents, glossaire. |
 
 ## README des modules
 

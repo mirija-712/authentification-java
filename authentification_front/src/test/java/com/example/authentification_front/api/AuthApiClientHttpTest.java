@@ -56,6 +56,26 @@ class AuthApiClientHttpTest {
 		});
 	}
 
+	private static void writePutJson(HttpServer server, String path, int status, String jsonBody) {
+		server.createContext(path, exchange -> {
+			try {
+				exchange.getRequestBody().readAllBytes();
+				if (!"PUT".equals(exchange.getRequestMethod())) {
+					exchange.sendResponseHeaders(405, -1);
+					return;
+				}
+				byte[] body = jsonBody.getBytes(StandardCharsets.UTF_8);
+				exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
+				exchange.sendResponseHeaders(status, body.length);
+				try (OutputStream os = exchange.getResponseBody()) {
+					os.write(body);
+				}
+			} finally {
+				exchange.close();
+			}
+		});
+	}
+
 	@Test
 	void register_returnsOkOn201() throws Exception {
 		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
@@ -137,6 +157,157 @@ class AuthApiClientHttpTest {
 			ApiResult<AuthApiClient.UserDto> r = client.me("secret-token");
 			assertInstanceOf(ApiResult.Ok.class, r);
 			assertEquals("z@z.z", ((ApiResult.Ok<AuthApiClient.UserDto>) r).value().email);
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void me_returnsErrOn401WithJsonMessage() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		writeGetJson(server, "/api/me", 401, "{\"message\":\"Jeton invalide\"}");
+		server.start();
+		try {
+			int port = server.getAddress().getPort();
+			AuthApiClient client = new AuthApiClient("http://127.0.0.1:" + port);
+			ApiResult<AuthApiClient.UserDto> r = client.me("bad");
+			assertInstanceOf(ApiResult.Err.class, r);
+			ApiResult.Err<AuthApiClient.UserDto> e = (ApiResult.Err<AuthApiClient.UserDto>) r;
+			assertEquals(401, e.httpStatus());
+			assertTrue(e.message().contains("Jeton"));
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void me_returnsNetworkErrWhenPortClosed() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		int port = server.getAddress().getPort();
+		server.stop(0);
+		AuthApiClient client = new AuthApiClient("http://127.0.0.1:" + port);
+		ApiResult<AuthApiClient.UserDto> r = client.me("t");
+		assertInstanceOf(ApiResult.Err.class, r);
+		assertTrue(((ApiResult.Err<?>) r).message().contains("Erreur réseau"));
+	}
+
+	@Test
+	void changePassword_returnsOkOn200() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		writePutJson(server, "/api/auth/change-password", 200, "{\"message\":\"Mot de passe changé avec succès\"}");
+		server.start();
+		try {
+			int port = server.getAddress().getPort();
+			AuthApiClient client = new AuthApiClient("http://127.0.0.1:" + port);
+			ApiResult<AuthApiClient.MessageDto> r = client.changePassword("tok", "a", "b", "b");
+			assertInstanceOf(ApiResult.Ok.class, r);
+			assertEquals("Mot de passe changé avec succès", ((ApiResult.Ok<AuthApiClient.MessageDto>) r).value().message);
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void changePassword_returnsErrOn400() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		writePutJson(server, "/api/auth/change-password", 400, "{\"message\":\"Ancien mot de passe incorrect\"}");
+		server.start();
+		try {
+			int port = server.getAddress().getPort();
+			AuthApiClient client = new AuthApiClient("http://127.0.0.1:" + port);
+			ApiResult<AuthApiClient.MessageDto> r = client.changePassword("tok", "x", "y", "y");
+			assertInstanceOf(ApiResult.Err.class, r);
+			assertEquals(400, ((ApiResult.Err<?>) r).httpStatus());
+			assertTrue(((ApiResult.Err<?>) r).message().contains("Ancien"));
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void changePassword_returnsErrWhenJsonInvalidOn200() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		writePutJson(server, "/api/auth/change-password", 200, "{bad");
+		server.start();
+		try {
+			int port = server.getAddress().getPort();
+			AuthApiClient client = new AuthApiClient("http://127.0.0.1:" + port);
+			ApiResult<AuthApiClient.MessageDto> r = client.changePassword("tok", "a", "b", "b");
+			assertInstanceOf(ApiResult.Err.class, r);
+			assertTrue(((ApiResult.Err<?>) r).message().contains("JSON"));
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void changePassword_returnsNetworkErrWhenPortClosed() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		int port = server.getAddress().getPort();
+		server.stop(0);
+		AuthApiClient client = new AuthApiClient("http://127.0.0.1:" + port);
+		ApiResult<AuthApiClient.MessageDto> r = client.changePassword("t", "a", "b", "b");
+		assertInstanceOf(ApiResult.Err.class, r);
+		assertTrue(((ApiResult.Err<?>) r).message().contains("Erreur réseau"));
+	}
+
+	@Test
+	void login_returnsErrWhenBodyTooLongWithoutJsonMessage() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		String longBody = "x".repeat(250);
+		server.createContext("/api/auth/login", exchange -> {
+			try {
+				exchange.getRequestBody().readAllBytes();
+				if (!"POST".equals(exchange.getRequestMethod())) {
+					exchange.sendResponseHeaders(405, -1);
+					return;
+				}
+				byte[] body = longBody.getBytes(StandardCharsets.UTF_8);
+				exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=utf-8");
+				exchange.sendResponseHeaders(500, body.length);
+				try (OutputStream os = exchange.getResponseBody()) {
+					os.write(body);
+				}
+			} finally {
+				exchange.close();
+			}
+		});
+		server.start();
+		try {
+			int port = server.getAddress().getPort();
+			AuthApiClient client = new AuthApiClient("http://127.0.0.1:" + port);
+			ApiResult<AuthApiClient.UserDto> r = client.login("a@b.c", "pwd");
+			assertInstanceOf(ApiResult.Err.class, r);
+			String msg = ((ApiResult.Err<?>) r).message();
+			assertTrue(msg.length() <= 210);
+			assertTrue(msg.endsWith("…") || msg.length() < 250);
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void me_returnsErrWhenEmptyBodyOnError() throws Exception {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		server.createContext("/api/me", exchange -> {
+			try {
+				exchange.getRequestBody().readAllBytes();
+				if (!"GET".equals(exchange.getRequestMethod())) {
+					exchange.sendResponseHeaders(405, -1);
+					return;
+				}
+				exchange.sendResponseHeaders(403, -1);
+			} finally {
+				exchange.close();
+			}
+		});
+		server.start();
+		try {
+			int port = server.getAddress().getPort();
+			AuthApiClient client = new AuthApiClient("http://127.0.0.1:" + port);
+			ApiResult<AuthApiClient.UserDto> r = client.me("t");
+			assertInstanceOf(ApiResult.Err.class, r);
+			assertEquals("Erreur inconnue", ((ApiResult.Err<?>) r).message());
 		} finally {
 			server.stop(0);
 		}

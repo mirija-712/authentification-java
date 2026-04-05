@@ -1,6 +1,8 @@
 module com.example.authentification_front {
 	requires javafx.controls;
 	requires javafx.fxml;
+	/* Platform, Application, Stage — utilisés par l’app et les tests JavaFX (AuthViewControllerTest). */
+	requires javafx.graphics;
 	requires java.net.http;
 	/* Gson est un module nommé (JAR 2.10+) : obligatoire pour compiler AuthApiClient. */
 	requires transitive com.google.gson;
