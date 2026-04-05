@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -48,6 +49,7 @@ class SsoHmacTest {
 
 	@Test
 	void hmacSha256Hex_rejectsNullPassword() {
-		assertThrows(NullPointerException.class, () -> SsoHmac.hmacSha256Hex(null, "msg"));
+		IllegalStateException ex = assertThrows(IllegalStateException.class, () -> SsoHmac.hmacSha256Hex(null, "msg"));
+		assertInstanceOf(NullPointerException.class, ex.getCause());
 	}
 }
