@@ -4,6 +4,7 @@ import com.example.authentification_front.security.SsoHmac;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -71,7 +72,10 @@ public final class AuthApiClient {
 					.build();
 			HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
 			return mapResponse(res, UserDto.class, 200);
-		} catch (Exception e) {
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return new ApiResult.Err<>("Erreur réseau : " + e.getMessage(), 0);
+		} catch (IOException e) {
 			return new ApiResult.Err<>("Erreur réseau : " + e.getMessage(), 0);
 		}
 	}
@@ -90,7 +94,10 @@ public final class AuthApiClient {
 					.build();
 			HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
 			return mapResponse(res, MessageDto.class, 200);
-		} catch (Exception e) {
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return new ApiResult.Err<>("Erreur réseau : " + e.getMessage(), 0);
+		} catch (IOException e) {
 			return new ApiResult.Err<>("Erreur réseau : " + e.getMessage(), 0);
 		}
 	}
@@ -105,7 +112,10 @@ public final class AuthApiClient {
 					.build();
 			HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
 			return mapResponse(res, okType, expectedOk);
-		} catch (Exception e) {
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return new ApiResult.Err<>("Erreur réseau : " + e.getMessage(), 0);
+		} catch (IOException e) {
 			return new ApiResult.Err<>("Erreur réseau : " + e.getMessage(), 0);
 		}
 	}

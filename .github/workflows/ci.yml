@@ -38,11 +38,15 @@ jobs:
 
       # APP_MASTER_KEY : clé factice uniquement pour la CI (énoncé TP4).
       # Les tests backend utilisent H2 (profil test) : pas de MySQL sur le runner.
+      # xvfb : affichage virtuel Linux pour les tests JavaFX (AuthViewControllerTest).
       - name: Maven verify + SonarCloud
         env:
           APP_MASTER_KEY: test_master_key_for_ci_only
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B verify sonar:sonar -Dsonar.token=${SONAR_TOKEN}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          xvfb-run -a mvn -B verify sonar:sonar -Dsonar.token=${SONAR_TOKEN}
 
       - name: Build Docker image
         run: docker build -t cdwfs-auth-app:ci .

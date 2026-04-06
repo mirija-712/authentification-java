@@ -6,7 +6,6 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -20,12 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests du contrôleur FXML : nécessite l’initialisation du toolkit JavaFX.
- * <p>
- * Désactivés sur les runners CI (variable {@code CI=true}) : pas d’affichage (erreur « Unable to open DISPLAY » sur Linux).
- * Exécuter localement : {@code mvn test} sans {@code CI}, ou avec un serveur X / Windows.
+ * Tests du contrôleur FXML : nécessite le toolkit JavaFX (display).
+ * Sur GitHub Actions, la workflow utilise {@code xvfb-run} pour fournir un affichage virtuel.
  */
-@DisabledIfEnvironmentVariable(named = "CI", matches = "true", disabledReason = "JavaFX requiert un display — exécuter ces tests en local")
 class AuthViewControllerTest {
 
 	@BeforeAll

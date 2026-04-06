@@ -26,6 +26,8 @@
             ${maven.multiModuleProjectDirectory}/authentification_back/target/site/jacoco/jacoco.xml,
             ${maven.multiModuleProjectDirectory}/authentification_front/target/site/jacoco/jacoco.xml
         </sonar.coverage.jacoco.xmlReportPaths>
+        <!-- Copie volontaire back/front (TP3) : ne pas compter comme duplication CPD. -->
+        <sonar.cpd.exclusions>**/SsoHmac.java</sonar.cpd.exclusions>
     </properties>
 
     <build>
