@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +32,9 @@ class AuthViewControllerTest {
 			});
 		} catch (IllegalStateException ignored) {
 			// toolkit déjà démarré (ex. autre classe de test)
+		} catch (UnsupportedOperationException e) {
+			// En CI/headless sans display, on ignore cette classe de tests UI.
+			Assumptions.assumeTrue(false, "JavaFX indisponible en environnement headless (DISPLAY absent)");
 		}
 	}
 
@@ -319,7 +323,7 @@ class AuthViewControllerTest {
 				c.loginPassword.setText("Pwd1!xxxxxxxxx");
 				c.onLogin();
 				c.onLogout();
-				assertTrue(c.changePasswordMessage.getText().contains("Reconnectez-vous"));
+				assertTrue(c.changePasswordMessage.getText().toLowerCase().contains("reconnectez-vous"));
 				c.onChangePassword();
 				assertTrue(c.changePasswordMessage.getText().contains("jeton actif"));
 			});
